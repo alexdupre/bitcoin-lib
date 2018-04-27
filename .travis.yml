@@ -7,14 +7,15 @@ install:
  - make
  - cd ..
  # then we build the java/scala lib
- - mvn install -DskipTests
+ - sbt test:compile
 script: 
  # test with bouncycastle
- - mvn test
+ - sbt test
  # test with libsecp256k1
  - export LD_LIBRARY_PATH=secp256k1/.libs
- - mvn test
+ - sbt test
 scala:
-- 2.11.11
+- 2.11.12
+- 2.12.5
 jdk:
 - oraclejdk8
