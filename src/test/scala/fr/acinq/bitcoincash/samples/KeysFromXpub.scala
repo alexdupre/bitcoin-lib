@@ -5,7 +5,7 @@ import fr.acinq.bitcoincash._
 object KeysFromXpub extends App {
   /**
     * this is how you would derive pubkeys and addresses from an xpub that someone gave you
-    * we currently support BIP49 (p2sh-of-p2wpkh) and BIP84 (p2wpkh)
+    * we currently support CashAddr (p2pkh and p2sh)
     *
     */
 
@@ -15,13 +15,13 @@ object KeysFromXpub extends App {
       case DeterministicWallet.ypub =>
         for (i <- 0L to 5L) {
           val pub = DeterministicWallet.derivePublicKey(master, 0L :: i :: Nil)
-          val address = computeBIP49Address(pub.publicKey, Block.TestnetGenesisBlock.hash)
+          val address = CashAddr.encodeAddress("bchtest", 0, pub.publicKey.hash160)
           println(s"$pub $address")
         }
       case DeterministicWallet.vpub =>
         for (i <- 0L to 5L) {
           val pub = DeterministicWallet.derivePublicKey(master, 0L :: i :: Nil)
-          val address = computeBIP84Address(pub.publicKey, Block.TestnetGenesisBlock.hash)
+          val address = CashAddr.encodeAddress("bchreg", 0, pub.publicKey.hash160)
           println(s"$pub $address")
         }
     }

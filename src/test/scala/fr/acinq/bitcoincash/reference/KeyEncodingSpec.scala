@@ -2,7 +2,7 @@ package fr.acinq.bitcoincash.reference
 
 import java.io.InputStreamReader
 
-import fr.acinq.bitcoincash.{Base58, Base58Check, Bech32, BinaryData, OP_CHECKSIG, OP_DUP, OP_EQUAL, OP_EQUALVERIFY, OP_HASH160, OP_PUSHDATA, Script}
+import fr.acinq.bitcoincash.{Base58, Base58Check, BinaryData}
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST.{JBool, JString, JValue}
 import org.json4s.jackson.JsonMethods
@@ -39,28 +39,22 @@ object KeyEncodingSpec {
           case JBool(value) => value
           case _ => None
         }
-        val JString(chain) = obj \ "chain"
+        val JBool(testNet) = obj \ "isTestnet"
         if (isPrivkey) {
           val (version, data) = Base58Check.decode(encoded)
           assert(version == Base58.Prefix.SecretKey || version == Base58.Prefix.SecretKeyTestnet)
           assert(BinaryData(data.take(32)) == BinaryData(hex))
-        } else encoded.head match {
-          case '1' | 'm' | 'n' =>
-            val (version, data) = Base58Check.decode(encoded)
-            assert(version == Base58.Prefix.PubkeyAddress || version == Base58.Prefix.PubkeyAddressTestnet)
-            val OP_DUP :: OP_HASH160 :: OP_PUSHDATA(hash, _) :: OP_EQUALVERIFY :: OP_CHECKSIG :: Nil = Script.parse(hex)
-            assert(data == hash)
-          case '2' | '3' =>
-            val (version, data) = Base58Check.decode(encoded)
-            assert(version == Base58.Prefix.ScriptAddress || version == Base58.Prefix.ScriptAddressTestnet)
-            val OP_HASH160 :: OP_PUSHDATA(hash, _) :: OP_EQUAL :: Nil = Script.parse(hex)
-            assert(data == hash)
-          case _ => encoded.substring(0, 2) match {
-            case "bc" | "tb" =>
-              val (_, tag, program) = Bech32.decodeWitnessAddress(encoded)
-              val op :: OP_PUSHDATA(hash, _) :: Nil = Script.parse(hex)
-              assert(Script.simpleValue(op) == tag)
-              assert(program == hash)
+        } else {
+          val JString(addrType) = obj \ "addrType"
+          encoded.head match {
+            case '1' | 'm' | 'n' =>
+              val (version, data) = Base58Check.decode(encoded)
+              assert(version == Base58.Prefix.PubkeyAddress || version == Base58.Prefix.PubkeyAddressTestnet)
+              assert(data == BinaryData(hex))
+            case '2' | '3' =>
+              val (version, data) = Base58Check.decode(encoded)
+              assert(version == Base58.Prefix.ScriptAddress || version == Base58.Prefix.ScriptAddressTestnet)
+              assert(data == BinaryData(hex))
           }
         }
       }
