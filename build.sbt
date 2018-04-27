@@ -1,6 +1,6 @@
 organization := "fr.acinq"
 
-name := "bitcoin-lib"
+name := "bitcoincash-lib"
 
 version := "0.9.17-SNAPSHOT"
 
