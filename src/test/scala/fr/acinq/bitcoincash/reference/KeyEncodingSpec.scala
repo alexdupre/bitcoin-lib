@@ -2,11 +2,14 @@ package fr.acinq.bitcoincash.reference
 
 import java.io.InputStreamReader
 
+import fr.acinq.bitcoincash.Crypto.PrivateKey
 import fr.acinq.bitcoincash.{Base58, Base58Check, BinaryData}
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST.{JBool, JString, JValue}
 import org.json4s.jackson.JsonMethods
 import org.scalatest.FunSuite
+
+import scala.util.Try
 
 class KeyEncodingSpec extends FunSuite {
   implicit val format = DefaultFormats
@@ -22,15 +25,26 @@ class KeyEncodingSpec extends FunSuite {
     val stream = classOf[KeyEncodingSpec].getResourceAsStream("/data/key_io_invalid.json")
     val json = JsonMethods.parse(new InputStreamReader(stream))
 
-    json.extract[List[List[JValue]]].map { data =>
-      intercept[Throwable] {
-        KeyEncodingSpec.check(data)
+    json.extract[List[List[JValue]]].foreach {
+      _ match {
+        case JString(value) :: Nil =>
+          assert(!KeyEncodingSpec.isValidBase58(value))
+        case unexpected => throw new IllegalArgumentException(s"don't know how to parse $unexpected")
       }
     }
   }
 }
 
 object KeyEncodingSpec {
+  def isValidBase58(input: String): Boolean = Try {
+    val (prefix, bin) = Base58Check.decode(input)
+    prefix match {
+      case Base58.Prefix.SecretKey | Base58.Prefix.SecretKeyTestnet => Try(PrivateKey(bin)).isSuccess
+      case Base58.Prefix.PubkeyAddress | Base58.Prefix.PubkeyAddressTestnet => bin.length == 20
+      case _ => false
+    }
+  } getOrElse (false)
+
   def check(data: List[JValue]): Unit = {
     data match {
       case JString(encoded) :: JString(hex) :: obj :: Nil => {
