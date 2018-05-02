@@ -133,6 +133,7 @@ package object bitcoincash {
     chainHash match {
       case Block.RegtestGenesisBlock.hash | Block.TestnetGenesisBlock.hash => Base58Check.encode(Base58.Prefix.PubkeyAddressTestnet, hash)
       case Block.LivenetGenesisBlock.hash => Base58Check.encode(Base58.Prefix.PubkeyAddress, hash)
+      case _ => throw new IllegalArgumentException("Unknown chain hash: " + chainHash)
     }
   }
 
