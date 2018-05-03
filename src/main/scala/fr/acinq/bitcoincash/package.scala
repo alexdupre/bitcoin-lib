@@ -14,8 +14,8 @@ package object bitcoincash {
   val MaxMoney = 21000000 * Coin
   val MaxScriptElementSize = 520
 
-  val MAX_BLOCK_WEIGHT = 4000000
-  val WITNESS_SCALE_FACTOR = 4
+  val ONE_MEGABYTE = 1000000
+  val MAX_TX_SIZE = ONE_MEGABYTE
 
   /**
     * signature hash flags
