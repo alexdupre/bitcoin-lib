@@ -2,7 +2,7 @@ organization := "fr.acinq"
 
 name := "bitcoincash-lib"
 
-version := "0.9.17-SNAPSHOT"
+version := "0.9.18-SNAPSHOT"
 
 crossScalaVersions := Seq("2.11.12", "2.12.5")
 
