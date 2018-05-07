@@ -12,21 +12,21 @@ object KeysFromXpub extends App {
   def deriveAddresses(xpub: String) = {
     val (prefix, master) = DeterministicWallet.ExtendedPublicKey.decode(xpub)
     prefix match {
-      case DeterministicWallet.ypub =>
+      case DeterministicWallet.tpub =>
         for (i <- 0L to 5L) {
           val pub = DeterministicWallet.derivePublicKey(master, 0L :: i :: Nil)
           val address = CashAddr.encodeAddress("bchtest", 0, pub.publicKey.hash160)
           println(s"$pub $address")
         }
-      case DeterministicWallet.vpub =>
+      case DeterministicWallet.xpub =>
         for (i <- 0L to 5L) {
           val pub = DeterministicWallet.derivePublicKey(master, 0L :: i :: Nil)
-          val address = CashAddr.encodeAddress("bchreg", 0, pub.publicKey.hash160)
+          val address = CashAddr.encodeAddress("bitcoincash", 0, pub.publicKey.hash160)
           println(s"$pub $address")
         }
     }
   }
 
-  deriveAddresses("ypub6XKCLnXy5uuK5w5mL6viWaRPKJ9EQ7bo2sL4NTJ1wp6WgQp5fCEGYV5KSfF5DLDdCgUZdHBHQmTx95wfCM5LnRHQhWocNybZDhMaiytoD8J")
-  deriveAddresses("vpub5V8AVGVJD4oTKnAEjjTXUg6pao1jpyooD7VwbrHdMPPcL5RvtPrdiWqtRBj5W9gbccoo8mZznYFY6QSL2CXP75eAPoRjgS6bZehQaWMoy5y")
+  deriveAddresses("xpub661MyMwAqRbcEYS8w7XLSVeEsBXy79zSzH1J8vCdxAZningWLdN3zgtU6LBpB85b3D2yc8sfvZU521AAwdZafEz7mnzBBsz4wKY5e4cp9LB")
+  deriveAddresses("tpubD6NzVbkrYhZ4WLczPJWReQycCJdd6YVWXubbVUFnJ5KgU5MDQrD998ZJLNGbhd2pq7ZtDiPYTfJ7iBenLVQpYgSQqPjUsQeJXH8VQ8xA67D")
 }

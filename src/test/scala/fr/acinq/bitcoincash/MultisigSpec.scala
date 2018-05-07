@@ -27,11 +27,12 @@ class MultisigSpec extends FunSuite with Matchers {
 
     // 196 = prefix for P2SH adress on testnet
     Base58Check.encode(Prefix.ScriptAddressTestnet, multisigAddress) should equal("2N8epCi6GwVDNYgJ7YtQ3qQ9vGQzaGu6JY4")
+    CashAddr.encodeAddress("bchtest", 8, multisigAddress) should equal("bchtest:pz5sqqa5mhh5her0cc087gt8m2wjxj2yugc32wkgg5")
 
-    // we want to redeem the first output of 41e573704b8fba07c261a31c89ca10c3cb202c7e4063f185c997a8a87cf21dea
+    // we want to redeem the second output of 80c8d2093c98be31b825d1aaf7827baf5aa5d7de137f3ffaef2871861866c375
     // using our private key 92TgRLMLLdwJjT1JrrmTTWEpZ8uG7zpHEgSVPTbwfAs27RpdeWM
     val txIn = TxIn(
-      OutPoint(fromHexString("41e573704b8fba07c261a31c89ca10c3cb202c7e4063f185c997a8a87cf21dea").reverse, 0),
+      OutPoint(fromHexString("80c8d2093c98be31b825d1aaf7827baf5aa5d7de137f3ffaef2871861866c375").reverse, 1),
       signatureScript = Array.empty[Byte], // empy signature script
       sequence = 0xFFFFFFFFL)
 
@@ -44,20 +45,21 @@ class MultisigSpec extends FunSuite with Matchers {
     val tx = Transaction(version = 1L, txIn = List(txIn), txOut = List(txOut), lockTime = 0L)
 
     val signData = SignData(
-      BinaryData("76a914298e5c1e2d2cf22deffd2885394376c7712f9c6088ac"), // PK script of 41e573704b8fba07c261a31c89ca10c3cb202c7e4063f185c997a8a87cf21dea
-      PrivateKey.fromBase58("92TgRLMLLdwJjT1JrrmTTWEpZ8uG7zpHEgSVPTbwfAs27RpdeWM", Base58.Prefix.SecretKeyTestnet))
+      BinaryData("76a9149cf68a4a7491eba10c977e073baa7dc35d62393788ac"), // PK script of 80c8d2093c98be31b825d1aaf7827baf5aa5d7de137f3ffaef2871861866c375
+      Btc(0.01),
+      PrivateKey.fromBase58("cRSkzQQkMg2hGMnMq4fDmz3ztqsfjtBgfP5WJ8REFUXmu4ZExCgG", Base58.Prefix.SecretKeyTestnet))
 
     val signedTx = Transaction.sign(tx, List(signData))
 
     //this works because signature is not randomized
-    assert(signedTx.toString == "0100000001ea1df27ca8a897c985f163407e2c20cbc310ca891ca361c207ba8f4b7073e541000000008b483045022100940f7bcb380fb6db698f71928bda8926f76305ff868919e8ef7729647606bf7702200d32f1231860cb7e6777447c4038627bee7f47bc54005f681b62ce71d4a6a7f10141042adeabf9817a4d34adf1fe8e0fd457a3c0c6378afd63325dbaaaccd4f254002f9cc4148f603beb0e874facd3a3e68f5d002a65c0d3658452a4e55a57f5c3b768ffffffff01a0bb0d000000000017a914a90003b4ddef4be46fc61e7f2167da9d234944e28700000000")
+    assert(signedTx.toString == "010000000175c36618867128effa3f7f13ded7a55aaf7b82f7aad125b831be983c09d2c880010000006a47304402205e7e7f056fa2081ada34640711116545ed197391bff2a5406cd15bdb08bfe7430220209c734b999272ed27c434ba7ab12153fd3b841ae99290b37e34805da3973c434121022adeabf9817a4d34adf1fe8e0fd457a3c0c6378afd63325dbaaaccd4f254002fffffffff01a0bb0d000000000017a914a90003b4ddef4be46fc61e7f2167da9d234944e28700000000")
 
-    // the id of this tx on testnet is af416176497f898b1eaf545ecec2a42b833488c2e4324f2cde732f875f2a5b34
+    // the id of this tx on testnet is 2c99798a8726cd36c27b0bc9c7d760c78913805e82f3975e6a1548430f616070
   }
 
   test("spend multisig transaction") {
     //this is the P2SH multisig)put transaction
-    val previousTx = Transaction.read("0100000001ea1df27ca8a897c985f163407e2c20cbc310ca891ca361c207ba8f4b7073e541000000008b483045022100940f7bcb380fb6db698f71928bda8926f76305ff868919e8ef7729647606bf7702200d32f1231860cb7e6777447c4038627bee7f47bc54005f681b62ce71d4a6a7f10141042adeabf9817a4d34adf1fe8e0fd457a3c0c6378afd63325dbaaaccd4f254002f9cc4148f603beb0e874facd3a3e68f5d002a65c0d3658452a4e55a57f5c3b768ffffffff01a0bb0d000000000017a914a90003b4ddef4be46fc61e7f2167da9d234944e28700000000")
+    val previousTx = Transaction.read("010000000175c36618867128effa3f7f13ded7a55aaf7b82f7aad125b831be983c09d2c880010000006a47304402205e7e7f056fa2081ada34640711116545ed197391bff2a5406cd15bdb08bfe7430220209c734b999272ed27c434ba7ab12153fd3b841ae99290b37e34805da3973c434121022adeabf9817a4d34adf1fe8e0fd457a3c0c6378afd63325dbaaaccd4f254002fffffffff01a0bb0d000000000017a914a90003b4ddef4be46fc61e7f2167da9d234944e28700000000")
 
     val dest = "msCMyGGJ5eRcUgM5SQkwirVQGbGcr9oaYv"
     //priv: 92TgRLMLLdwJjT1JrrmTTWEpZ8uG7zpHEgSVPTbwfAs27RpdeWM
@@ -75,17 +77,17 @@ class MultisigSpec extends FunSuite with Matchers {
     )
 
     // we only need 2 signatures because this is a 2-on-3 multisig
-    val sig1 = Transaction.signInput(tx, 0, redeemScript, SIGHASH_ALL, 0 satoshi, SigVersion.SIGVERSION_BASE, key1)
-    val sig2 = Transaction.signInput(tx, 0, redeemScript, SIGHASH_ALL, 0 satoshi, SigVersion.SIGVERSION_BASE, key2)
+    val sig1 = Transaction.signInput(tx, 0, redeemScript, SIGHASH_ALL | SIGHASH_FORKID, previousTx.txOut(0).amount, key1)
+    val sig2 = Transaction.signInput(tx, 0, redeemScript, SIGHASH_ALL | SIGHASH_FORKID, previousTx.txOut(0).amount, key2)
 
     // OP_0 because of a bug) OP_CHECKMULTISIG
     val scriptSig = OP_0 :: OP_PUSHDATA(sig1) :: OP_PUSHDATA(sig2) :: OP_PUSHDATA(redeemScript) :: Nil
     val signedTx = tx.updateSigScript(0, scriptSig)
 
     //this works because signature is not randomized
-    assert(signedTx.toString == "0100000001345b2a5f872f73de2c4f32e4c28834832ba4c2ce5e54af1e8b897f49766141af00000000fdfe0000483045022100e5a3c850d7cb8776bfbd3fa4b24ce9bb3514fe96a922449dd14c03f5fa04d6ad022035710c6b9c2922c7b8de02fb674cb61e2c18ea439b190b4f55c14fad1ed89eb801483045022100ec6b1ea37cc5694312f7d5fe72280ef21688d11e00f307fdcc1eff30718e30560220542e02c32e3e392cce7adfc287c72f7f1e51ca73980505c2bebcf0b7b441ff90014c6952210394d30868076ab1ea7736ed3bdbec99497a6ad30b25afd709cdf3804cd389996a21032c58bc9615a6ff24e9132cef33f1ef373d97dc6da7933755bc8bb86dbee9f55c2102c4d72d99ca5ad12c17c9cfe043dc4e777075e8835af96f46d8e3ccd929fe192653aeffffffff0100350c00000000001976a914801d5eb10d2c1513ba1960fd8893f0ddbbe33bb388ac00000000")
+    assert(signedTx.toString == "01000000017060610f4348156a5e97f3825e801389c760d7c7c90b7bc236cd26878a79992c00000000fdfd0000483045022100ee9bf4290bd3233e39d2336ef0bdf9e8d4c40279d0cc57fdd50fde8f3de02d4602200464570453b612859d7400a7ba90a55ae2952455098aaaa92cccbfe103c1c6ad4147304402202d7e006738f8fe39aafb19f44f141be9071513f98287dc3e036df5cd6c61b42a02200f8a30a248c3e7bba34fefa21224fa8a47fa039e937955ad289131a54541b860414c6952210394d30868076ab1ea7736ed3bdbec99497a6ad30b25afd709cdf3804cd389996a21032c58bc9615a6ff24e9132cef33f1ef373d97dc6da7933755bc8bb86dbee9f55c2102c4d72d99ca5ad12c17c9cfe043dc4e777075e8835af96f46d8e3ccd929fe192653aeffffffff0100350c00000000001976a914801d5eb10d2c1513ba1960fd8893f0ddbbe33bb388ac00000000")
 
-    // the id of this tx on testnet is f137884feb9a951bf9b159432ebb771ec76fa6e7332c06cb8a6b718148f101af
+    // the id of this tx on testnet is 57eca52cc29953454a5a6b7418de89d6db96f782de2fcf33cc5dda6c8e071c31
     // redeem the tx
     Transaction.correctlySpends(signedTx, List(previousTx), ScriptFlags.MANDATORY_SCRIPT_VERIFY_FLAGS)
   }

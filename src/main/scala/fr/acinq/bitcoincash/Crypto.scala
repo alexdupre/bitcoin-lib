@@ -102,7 +102,7 @@ object Crypto {
     def apply(data: BinaryData, compressed: Boolean): PrivateKey = new PrivateKey(Scalar(data.take(32)), compressed)
 
     def fromBase58(value: String, prefix: Byte): PrivateKey = {
-      require(Set(Base58.Prefix.SecretKey, Base58.Prefix.SecretKeyTestnet, Base58.Prefix.SecretKeySegnet).contains(prefix), "invalid base 58 prefix for a private key")
+      require(Set(Base58.Prefix.SecretKey, Base58.Prefix.SecretKeyTestnet).contains(prefix), "invalid base 58 prefix for a private key")
       val (`prefix`, data) = Base58Check.decode(value)
       PrivateKey(data)
     }
@@ -371,14 +371,23 @@ object Crypto {
     if (sig.isEmpty) true
     else if ((flags & (SCRIPT_VERIFY_DERSIG | SCRIPT_VERIFY_LOW_S | SCRIPT_VERIFY_STRICTENC)) != 0 && !isDERSignature(sig)) false
     else if ((flags & SCRIPT_VERIFY_LOW_S) != 0 && !isLowDERSignature(sig)) false
-    else if ((flags & SCRIPT_VERIFY_STRICTENC) != 0 && !isDefinedHashtypeSignature(sig)) false
+    else if ((flags & SCRIPT_VERIFY_STRICTENC) != 0) {
+      if (!isDefinedHashtypeSignature(sig)) false
+      else {
+        val usesForkId = isForkId(getHashType(sig))
+        val forkIdEnabled = (flags & SCRIPT_ENABLE_SIGHASH_FORKID) != 0
+        if (!forkIdEnabled && usesForkId) false
+        else if (forkIdEnabled && !usesForkId) false
+        else true
+      }
+    }
     else true
   }
 
-  def checkPubKeyEncoding(key: Seq[Byte], flags: Int, sigVersion: Int): Boolean = {
+  def checkPubKeyEncoding(key: Seq[Byte], flags: Int): Boolean = {
     if ((flags & ScriptFlags.SCRIPT_VERIFY_STRICTENC) != 0) require(isPubKeyCompressedOrUncompressed(key), "invalid public key")
-    // Only compressed keys are accepted in segwit
-    if ((flags & ScriptFlags.SCRIPT_VERIFY_WITNESS_PUBKEYTYPE) != 0 && sigVersion == SigVersion.SIGVERSION_WITNESS_V0) require(isPubKeyCompressed(key), "public key must be compressed in segwit")
+    // Only compressed keys are accepted when SCRIPT_VERIFY_COMPRESSED_PUBKEYTYPE is enabled.
+    if ((flags & ScriptFlags.SCRIPT_VERIFY_COMPRESSED_PUBKEYTYPE) != 0) require(isPubKeyCompressed(key), "public key must be compressed")
     true
   }
 
@@ -401,9 +410,11 @@ object Crypto {
 
   def isPrivateKeyCompressed(key: PrivateKey): Boolean = key.compressed
 
+  def getHashType(sig: Seq[Byte]): Int = if (sig.isEmpty) 0 else sig.last & 0xff
+
   def isDefinedHashtypeSignature(sig: Seq[Byte]): Boolean = if (sig.isEmpty) false
   else {
-    val hashType = (sig.last & 0xff) & (~(SIGHASH_ANYONECANPAY))
+    val hashType = getHashType(sig) & (~(SIGHASH_ANYONECANPAY | SIGHASH_FORKID))
     if (hashType < SIGHASH_ALL || hashType > SIGHASH_SINGLE) false else true
   }
 

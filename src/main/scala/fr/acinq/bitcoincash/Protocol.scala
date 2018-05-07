@@ -159,7 +159,6 @@ object Protocol {
 
   implicit val txInSer = TxIn
   implicit val txOutSer = TxOut
-  implicit val scriptWitnessSer = ScriptWitness
   implicit val txSer = Transaction
   implicit val networkAddressWithTimestampSer = NetworkAddressWithTimestamp
   implicit val inventoryVectorOutSer = InventoryVector
@@ -258,11 +257,8 @@ trait BtcSerializable[T] {
 }
 
 object Message extends BtcSerializer[Message] {
-  val MagicMain = 0xD9B4BEF9L
-  val MagicTestNet = 0xDAB5BFFAL
-  val MagicTestnet3 = 0x0709110BL
-  val MagicNamecoin = 0xFEB4BEF9L
-  val MagicSegnet = 0xC4A1ABDC
+  val MagicMain = 0xE8F3E1E3L
+  val MagicTestnet3 = 0xF4F3E5F4L
 
   override def read(in: InputStream, protocolVersion: Long): Message = {
     val magic = uint32(in)

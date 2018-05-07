@@ -63,20 +63,14 @@ object ScriptFlags {
   // See BIP65 for details.
   val SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY = (1 << 9)
 
-
-  // See BIP112 for details
-  val SCRIPT_VERIFY_CHECKSEQUENCEVERIFY = (1 << 10)
-
   // support CHECKSEQUENCEVERIFY opcode
   //
-  // Support segregated witness
-  //
-  val SCRIPT_VERIFY_WITNESS = (1 << 11)
+  // See BIP112 for details
+  val SCRIPT_VERIFY_CHECKSEQUENCEVERIFY = (1 << 10)
 
   // Making v2-v16 witness program non-standard
   //
   val SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM = (1 << 12)
-
 
   // Segwit script only: Require the argument of OP_IF/NOTIF to be exactly 0x01 or empty vector
   //
@@ -86,9 +80,22 @@ object ScriptFlags {
   //
   val SCRIPT_VERIFY_NULLFAIL = (1 << 14)
 
-  // Public keys in segregated witness scripts must be compressed
+  // Public keys in scripts must be compressed
   //
-  val SCRIPT_VERIFY_WITNESS_PUBKEYTYPE = (1 << 15)
+  val SCRIPT_VERIFY_COMPRESSED_PUBKEYTYPE = (1 << 15)
+
+  // Do we accept signature using SIGHASH_FORKID
+  //
+  val SCRIPT_ENABLE_SIGHASH_FORKID = (1 << 16)
+
+  // Do we accept activate replay protection using a different fork id.
+  //
+  val SCRIPT_ENABLE_REPLAY_PROTECTION = (1 << 17)
+
+  // Enable new opcodes.
+  //
+  val SCRIPT_ENABLE_MONOLITH_OPCODES = (1 << 18)
+
 
   /**
     * Mandatory script verification flags that all new blocks must comply with for
@@ -99,7 +106,8 @@ object ScriptFlags {
     * Failing one of these tests may trigger a DoS ban - see CheckInputs() for
     * details.
     */
-  val MANDATORY_SCRIPT_VERIFY_FLAGS = SCRIPT_VERIFY_P2SH
+  val MANDATORY_SCRIPT_VERIFY_FLAGS = SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_STRICTENC |
+    SCRIPT_ENABLE_SIGHASH_FORKID | SCRIPT_VERIFY_LOW_S | SCRIPT_VERIFY_NULLFAIL
 
   /**
     * Standard script verification flags that standard transactions will comply
@@ -108,19 +116,15 @@ object ScriptFlags {
     */
   val STANDARD_SCRIPT_VERIFY_FLAGS = MANDATORY_SCRIPT_VERIFY_FLAGS |
     SCRIPT_VERIFY_DERSIG |
-    SCRIPT_VERIFY_STRICTENC |
     SCRIPT_VERIFY_MINIMALDATA |
     SCRIPT_VERIFY_NULLDUMMY |
     SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS |
     SCRIPT_VERIFY_CLEANSTACK |
-    SCRIPT_VERIFY_MINIMALIF |
     SCRIPT_VERIFY_NULLFAIL |
     SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY |
     SCRIPT_VERIFY_CHECKSEQUENCEVERIFY |
     SCRIPT_VERIFY_LOW_S |
-    SCRIPT_VERIFY_WITNESS |
-    SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM |
-    SCRIPT_VERIFY_WITNESS_PUBKEYTYPE
+    SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM
 
   /** For convenience, standard but not mandatory verify flags. */
   val STANDARD_NOT_MANDATORY_VERIFY_FLAGS = STANDARD_SCRIPT_VERIFY_FLAGS & ~MANDATORY_SCRIPT_VERIFY_FLAGS
@@ -193,8 +197,9 @@ object Script {
     if (op == OP_0) 0 else (elt2code(op) - 0x50).toByte
   }
 
-  def isDisabled(op: ScriptElt) = op match {
-    case OP_CAT | OP_SUBSTR | OP_LEFT | OP_RIGHT | OP_INVERT | OP_AND | OP_OR | OP_XOR | OP_2MUL | OP_2DIV | OP_MUL | OP_DIV | OP_MOD | OP_LSHIFT | OP_RSHIFT => true
+  def isDisabled(op: ScriptElt, scriptFlag: Int) = op match {
+    case OP_INVERT | OP_2MUL | OP_2DIV | OP_MUL | OP_LSHIFT | OP_RSHIFT => true
+    case OP_CAT | OP_SPLIT | OP_AND | OP_OR | OP_XOR | OP_NUM2BIN | OP_BIN2NUM | OP_DIV | OP_MOD if (scriptFlag & SCRIPT_ENABLE_MONOLITH_OPCODES) == 0 => true
     case _ => false
   }
 
@@ -298,8 +303,6 @@ object Script {
     val toRemove = OP_PUSHDATA(signature)
     script.filterNot(_ == toRemove)
   }
-
-  def removeSignatures(script: List[ScriptElt], sigs: List[BinaryData]): List[ScriptElt] = sigs.foldLeft(script)(removeSignature)
 
   def checkLockTime(lockTime: Long, tx: Transaction, inputIndex: Int): Boolean = {
     // There are two kinds of nLockTime: lock-by-blockheight
@@ -414,14 +417,14 @@ object Script {
     * @param scriptFlag script flags
     * @param callback   optional callback
     */
-  class Runner(context: Context, scriptFlag: Int = MANDATORY_SCRIPT_VERIFY_FLAGS, callback: Option[Runner.Callback] = None) {
+  class Runner(context: Context, var scriptFlag: Int = MANDATORY_SCRIPT_VERIFY_FLAGS, callback: Option[Runner.Callback] = None) {
 
     import Runner._
 
-    def checkSignature(pubKey: Seq[Byte], sigBytes: Seq[Byte], scriptCode: Seq[Byte], signatureVersion: Int): Boolean = {
+    def checkSignature(pubKey: Seq[Byte], sigBytes: Seq[Byte], scriptCode: Seq[Byte]): Boolean = {
       if (sigBytes.isEmpty) false
       else if (!Crypto.checkSignatureEncoding(sigBytes, scriptFlag)) throw new RuntimeException("invalid signature")
-      else if (!Crypto.checkPubKeyEncoding(pubKey, scriptFlag, signatureVersion)) throw new RuntimeException("invalid public key")
+      else if (!Crypto.checkPubKeyEncoding(pubKey, scriptFlag)) throw new RuntimeException("invalid public key")
       else if (!Crypto.isPubKeyValid(pubKey)) false // see how this is different from above ?
       else {
         val sigHashFlags = sigBytes.last & 0xff
@@ -429,22 +432,22 @@ object Script {
         val sigBytes1 = sigBytes.take(sigBytes.length - 1) // drop sig hash
         if (sigBytes1.isEmpty) false
         else {
-          val hash = Transaction.hashForSigning(context.tx, context.inputIndex, scriptCode, sigHashFlags, context.amount, signatureVersion)
+          val hash = Transaction.hashForSigning(context.tx, context.inputIndex, scriptCode, sigHashFlags, context.amount, scriptFlag)
           val result = Crypto.verifySignature(hash, sigBytes, PublicKey(pubKey))
           result
         }
       }
     }
 
-    def checkSignatures(pubKeys: Seq[Seq[Byte]], sigs: Seq[Seq[Byte]], scriptCode: Seq[Byte], signatureVersion: Int): Boolean = sigs match {
+    def checkSignatures(pubKeys: Seq[Seq[Byte]], sigs: Seq[Seq[Byte]], scriptCode: Seq[Byte]): Boolean = sigs match {
       case Nil => true
       case _ if sigs.length > pubKeys.length => false
       case sig :: _ if !Crypto.checkSignatureEncoding(sig, scriptFlag) => throw new RuntimeException("invalid signature")
       case sig :: _ =>
-        if (checkSignature(pubKeys.head, sig, scriptCode, signatureVersion))
-          checkSignatures(pubKeys.tail, sigs.tail, scriptCode, signatureVersion)
+        if (checkSignature(pubKeys.head, sig, scriptCode))
+          checkSignatures(pubKeys.tail, sigs.tail, scriptCode)
         else
-          checkSignatures(pubKeys.tail, sigs, scriptCode, signatureVersion)
+          checkSignatures(pubKeys.tail, sigs, scriptCode)
     }
 
     def checkMinimalEncoding: Boolean = (scriptFlag & SCRIPT_VERIFY_MINIMALDATA) != 0
@@ -476,18 +479,15 @@ object Script {
       */
     def run(script: BinaryData, stack: Stack): Stack = run(parse(script), stack)
 
-    def run(script: List[ScriptElt], stack: Stack): Stack = run(script, stack, SigVersion.SIGVERSION_BASE)
-
     /**
       * execute a script, starting from an existing stack
       *
       * @param script           serialized script
       * @param stack            initial stack
-      * @param signatureVersion signature version (0: use pre-segwit tx hash, 1: use segwit tx hash)
       * @return the stack updated by the script
       */
-    def run(script: List[ScriptElt], stack: Stack, signatureVersion: Int): Stack =
-      run(script, stack, State(conditions = List.empty[Boolean], altstack = List.empty[Seq[Byte]], opCount = 0, scriptCode = script), signatureVersion)
+    def run(script: List[ScriptElt], stack: Stack): Stack =
+      run(script, stack, State(conditions = List.empty[Boolean], altstack = List.empty[Seq[Byte]], opCount = 0, scriptCode = script))
 
 
     /**
@@ -499,7 +499,7 @@ object Script {
       * @return the stack updated by the script
       */
     @tailrec
-    final def run(script: List[ScriptElt], stack: Stack, state: State, signatureVersion: Int): Stack = {
+    final def run(script: List[ScriptElt], stack: Stack, state: State): Stack = {
       import state._
       callback.map(f => f(script, stack, state))
       if ((stack.length + altstack.length) > 1000) throw new RuntimeException(s"stack is too large: stack size = ${stack.length} alt stack size = ${altstack.length}")
@@ -508,56 +508,67 @@ object Script {
         // first, things that are always checked even in non-executed IF branches
         case Nil if conditions.nonEmpty => throw new RuntimeException("IF/ENDIF imbalance")
         case Nil => stack
-        case op :: _ if isDisabled(op) => throw new RuntimeException(s"$op isdisabled")
+        case op :: _ if isDisabled(op, scriptFlag) => throw new RuntimeException(s"$op isdisabled")
         case OP_VERIF :: _ => throw new RuntimeException("OP_VERIF is always invalid")
         case OP_VERNOTIF :: _ => throw new RuntimeException("OP_VERNOTIF is always invalid")
         case OP_PUSHDATA(data, _) :: _ if data.size > MaxScriptElementSize => throw new RuntimeException("Push value size limit exceeded")
         // check whether we are in a non-executed IF branch
-        case OP_IF :: tail if conditions.contains(false) => run(tail, stack, state.copy(conditions = false :: conditions, opCount = opCount + 1), signatureVersion)
+        case OP_IF :: tail if conditions.contains(false) => run(tail, stack, state.copy(conditions = false :: conditions, opCount = opCount + 1))
         case OP_IF :: tail => stack match {
-          case True :: stacktail if signatureVersion == SigVersion.SIGVERSION_WITNESS_V0 && (scriptFlag & SCRIPT_VERIFY_MINIMALIF) != 0 => run(tail, stacktail, state.copy(conditions = true :: conditions, opCount = opCount + 1), signatureVersion)
-          case False :: stacktail if signatureVersion == SigVersion.SIGVERSION_WITNESS_V0 && (scriptFlag & SCRIPT_VERIFY_MINIMALIF) != 0 => run(tail, stacktail, state.copy(conditions = false :: conditions, opCount = opCount + 1), signatureVersion)
-          case _ :: stacktail if signatureVersion == SigVersion.SIGVERSION_WITNESS_V0 && (scriptFlag & SCRIPT_VERIFY_MINIMALIF) != 0 => throw new RuntimeException("OP_IF argument must be minimal")
-          case head :: stacktail if castToBoolean(head) => run(tail, stacktail, state.copy(conditions = true :: conditions, opCount = opCount + 1), signatureVersion)
-          case head :: stacktail => run(tail, stacktail, state.copy(conditions = false :: conditions, opCount = opCount + 1), signatureVersion)
+          case True :: stacktail if (scriptFlag & SCRIPT_VERIFY_MINIMALIF) != 0 => run(tail, stacktail, state.copy(conditions = true :: conditions, opCount = opCount + 1))
+          case False :: stacktail if (scriptFlag & SCRIPT_VERIFY_MINIMALIF) != 0 => run(tail, stacktail, state.copy(conditions = false :: conditions, opCount = opCount + 1))
+          case _ :: stacktail if (scriptFlag & SCRIPT_VERIFY_MINIMALIF) != 0 => throw new RuntimeException("OP_IF argument must be minimal")
+          case head :: stacktail if castToBoolean(head) => run(tail, stacktail, state.copy(conditions = true :: conditions, opCount = opCount + 1))
+          case head :: stacktail => run(tail, stacktail, state.copy(conditions = false :: conditions, opCount = opCount + 1))
         }
-        case OP_NOTIF :: tail if conditions.contains(false) => run(tail, stack, state.copy(conditions = true :: conditions, opCount = opCount + 1), signatureVersion)
+        case OP_NOTIF :: tail if conditions.contains(false) => run(tail, stack, state.copy(conditions = true :: conditions, opCount = opCount + 1))
         case OP_NOTIF :: tail => stack match {
-          case False :: stacktail if signatureVersion == SigVersion.SIGVERSION_WITNESS_V0 && (scriptFlag & SCRIPT_VERIFY_MINIMALIF) != 0 => run(tail, stacktail, state.copy(conditions = true :: conditions, opCount = opCount + 1), signatureVersion)
-          case True :: stacktail if signatureVersion == SigVersion.SIGVERSION_WITNESS_V0 && (scriptFlag & SCRIPT_VERIFY_MINIMALIF) != 0 => run(tail, stacktail, state.copy(conditions = false :: conditions, opCount = opCount + 1), signatureVersion)
-          case _ :: stacktail if signatureVersion == SigVersion.SIGVERSION_WITNESS_V0 && (scriptFlag & SCRIPT_VERIFY_MINIMALIF) != 0 => throw new RuntimeException("OP_NOTIF argument must be minimal")
-          case head :: stacktail if castToBoolean(head) => run(tail, stacktail, state.copy(conditions = false :: conditions, opCount = opCount + 1), signatureVersion)
-          case head :: stacktail => run(tail, stacktail, state.copy(conditions = true :: conditions, opCount = opCount + 1), signatureVersion)
+          case False :: stacktail if (scriptFlag & SCRIPT_VERIFY_MINIMALIF) != 0 => run(tail, stacktail, state.copy(conditions = true :: conditions, opCount = opCount + 1))
+          case True :: stacktail if (scriptFlag & SCRIPT_VERIFY_MINIMALIF) != 0 => run(tail, stacktail, state.copy(conditions = false :: conditions, opCount = opCount + 1))
+          case _ :: stacktail if (scriptFlag & SCRIPT_VERIFY_MINIMALIF) != 0 => throw new RuntimeException("OP_NOTIF argument must be minimal")
+          case head :: stacktail if castToBoolean(head) => run(tail, stacktail, state.copy(conditions = false :: conditions, opCount = opCount + 1))
+          case head :: stacktail => run(tail, stacktail, state.copy(conditions = true :: conditions, opCount = opCount + 1))
         }
-        case OP_ELSE :: tail => run(tail, stack, state.copy(conditions = !conditions.head :: conditions.tail, opCount = opCount + 1), signatureVersion)
-        case OP_ENDIF :: tail => run(tail, stack, state.copy(conditions = conditions.tail, opCount = opCount + 1), signatureVersion)
-        case head :: tail if conditions.contains(false) => run(tail, stack, state.copy(opCount = opCount + cost(head)), signatureVersion)
+        case OP_ELSE :: tail => run(tail, stack, state.copy(conditions = !conditions.head :: conditions.tail, opCount = opCount + 1))
+        case OP_ENDIF :: tail => run(tail, stack, state.copy(conditions = conditions.tail, opCount = opCount + 1))
+        case head :: tail if conditions.contains(false) => run(tail, stack, state.copy(opCount = opCount + cost(head)))
         // and now, things that are checked only in an executed IF branch
-        case OP_0 :: tail => run(tail, Seq.empty[Byte] :: stack, state, signatureVersion)
-        case op :: tail if isSimpleValue(op) => run(tail, encodeNumber(simpleValue(op)) :: stack, state, signatureVersion)
-        case OP_NOP :: tail => run(tail, stack, state.copy(opCount = opCount + 1), signatureVersion)
+        case OP_0 :: tail => run(tail, Seq.empty[Byte] :: stack, state)
+        case op :: tail if isSimpleValue(op) => run(tail, encodeNumber(simpleValue(op)) :: stack, state)
+        case OP_NOP :: tail => run(tail, stack, state.copy(opCount = opCount + 1))
         case op :: tail if isUpgradableNop(op) && ((scriptFlag & SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS) != 0) => throw new RuntimeException("use of upgradable NOP is discouraged")
-        case op :: tail if isUpgradableNop(op) => run(tail, stack, state.copy(opCount = opCount + 1), signatureVersion)
+        case op :: tail if isUpgradableNop(op) => run(tail, stack, state.copy(opCount = opCount + 1))
         case OP_1ADD :: tail if stack.isEmpty => throw new RuntimeException("cannot run OP_1ADD on am empty stack")
-        case OP_1ADD :: tail => run(tail, encodeNumber(decodeNumber(stack.head) + 1) :: stack.tail, state.copy(opCount = opCount + 1), signatureVersion)
+        case OP_1ADD :: tail => run(tail, encodeNumber(decodeNumber(stack.head) + 1) :: stack.tail, state.copy(opCount = opCount + 1))
         case OP_1SUB :: tail if stack.isEmpty => throw new RuntimeException("cannot run OP_1SUB on am empty stack")
-        case OP_1SUB :: tail => run(tail, encodeNumber(decodeNumber(stack.head) - 1) :: stack.tail, state.copy(opCount = opCount + 1), signatureVersion)
+        case OP_1SUB :: tail => run(tail, encodeNumber(decodeNumber(stack.head) - 1) :: stack.tail, state.copy(opCount = opCount + 1))
         case OP_ABS :: tail if stack.isEmpty => throw new RuntimeException("cannot run OP_ABS on am empty stack")
-        case OP_ABS :: tail => run(tail, encodeNumber(Math.abs(decodeNumber(stack.head))) :: stack.tail, state.copy(opCount = opCount + 1), signatureVersion)
+        case OP_ABS :: tail => run(tail, encodeNumber(Math.abs(decodeNumber(stack.head))) :: stack.tail, state.copy(opCount = opCount + 1))
         case OP_ADD :: tail => stack match {
           case a :: b :: stacktail =>
             val x = decodeNumber(a)
             val y = decodeNumber(b)
             val result = x + y
-            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("cannot run OP_ADD on a stack with less than 2 elements")
         }
+        case OP_AND :: tail => stack match {
+          case x1 :: x2 :: stacktail =>
+            if (x1.length != x2.length) throw new RuntimeException("inputs must be the same size")
+            val result = (x2 zip x1).map { case (ch1, ch2) => (ch1 & ch2).toByte }
+            run(tail, result :: stacktail, state.copy(opCount = opCount + 1))
+          case _ => throw new RuntimeException("cannot run OP_AND on a stack of less than 2 elements")
+        }
+        case OP_BIN2NUM :: _ if stack.isEmpty => throw new RuntimeException("cannot run OP_BIN2NUM on am empty stack")
+        case OP_BIN2NUM :: tail =>
+          val n = encodeNumber(Script.decodeNumber(stack.head, false, Int.MaxValue)).data
+          run(tail, n :: stack.tail, state.copy(opCount = opCount + 1))
         case OP_BOOLAND :: tail => stack match {
           case x1 :: x2 :: stacktail =>
             val n1 = decodeNumber(x1)
             val n2 = decodeNumber(x2)
             val result = if (n1 != 0 && n2 != 0) 1 else 0
-            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("cannot run OP_BOOLAND on a stack with less than 2 elements")
         }
         case OP_BOOLOR :: tail => stack match {
@@ -565,8 +576,15 @@ object Script {
             val n1 = decodeNumber(x1)
             val n2 = decodeNumber(x2)
             val result = if (n1 != 0 || n2 != 0) 1 else 0
-            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("cannot run OP_BOOLOR on a stack with less than 2 elements")
+        }
+        case OP_CAT :: tail => stack match {
+          case x1 :: x2 :: stacktail =>
+            if (x1.length + x2.length > MaxScriptElementSize) throw new RuntimeException("concatenated string is too long")
+            val result = x2 ++ x1
+            run(tail, result :: stacktail, state.copy(opCount = opCount + 1))
+          case _ => throw new RuntimeException("cannot run OP_CAT on a stack of less than 2 elements")
         }
         case OP_CHECKLOCKTIMEVERIFY :: tail if ((scriptFlag & SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY) != 0) => stack match {
           case head :: _ =>
@@ -588,11 +606,11 @@ object Script {
             if (locktime < 0) throw new RuntimeException("CLTV lock time cannot be negative")
             if (!checkLockTime(locktime, context.tx, context.inputIndex)) throw new RuntimeException("unsatisfied CLTV lock time")
             // stack is not popped: we use stack here and not stacktail !!
-            run(tail, stack, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, stack, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("cannot run OP_CHECKLOCKTIMEVERIFY on an empty stack")
         }
         case OP_CHECKLOCKTIMEVERIFY :: _ if ((scriptFlag & SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS) != 0) => throw new RuntimeException("use of upgradable NOP is discouraged")
-        case OP_CHECKLOCKTIMEVERIFY :: tail => run(tail, stack, state.copy(opCount = opCount + 1), signatureVersion)
+        case OP_CHECKLOCKTIMEVERIFY :: tail => run(tail, stack, state.copy(opCount = opCount + 1))
         case OP_CHECKSEQUENCEVERIFY :: tail if ((scriptFlag & SCRIPT_VERIFY_CHECKSEQUENCEVERIFY) != 0) => stack match {
           case head :: _ =>
             // nSequence, like nLockTime, is a 32-bit unsigned integer
@@ -614,24 +632,24 @@ object Script {
             }
 
             // stack is not popped: we use stack here and not stacktail !!
-            run(tail, stack, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, stack, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("cannot run OP_CHECKSEQUENCEVERIFY on an empty stack")
         }
         case OP_CHECKSEQUENCEVERIFY :: _ if ((scriptFlag & SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS) != 0) => throw new RuntimeException("use of upgradable NOP is discouraged")
-        case OP_CHECKSEQUENCEVERIFY :: tail => run(tail, stack, state.copy(opCount = opCount + 1), signatureVersion)
+        case OP_CHECKSEQUENCEVERIFY :: tail => run(tail, stack, state.copy(opCount = opCount + 1))
         case OP_CHECKSIG :: tail => stack match {
           case pubKey :: sigBytes :: stacktail => {
-            // remove signature from script
-            val scriptCode1 = if (signatureVersion == SigVersion.SIGVERSION_BASE) removeSignature(scriptCode, sigBytes) else scriptCode
-            val success = checkSignature(pubKey, sigBytes, Script.write(scriptCode1), signatureVersion)
+            // Remove signature for pre-fork scripts
+            val scriptCode1 = if ((scriptFlag & SCRIPT_ENABLE_SIGHASH_FORKID) == 0 || !isForkId(getHashType(sigBytes))) removeSignature(scriptCode, sigBytes) else scriptCode
+            val success = checkSignature(pubKey, sigBytes, Script.write(scriptCode1))
             if (!success && (scriptFlag & SCRIPT_VERIFY_NULLFAIL) != 0) {
               require(sigBytes.isEmpty, "Signature must be zero for failed CHECKSIG operation")
             }
-            run(tail, (if (success) True else False) :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, (if (success) True else False) :: stacktail, state.copy(opCount = opCount + 1))
           }
           case _ => throw new RuntimeException("Cannot perform OP_CHECKSIG on a stack with less than 2 elements")
         }
-        case OP_CHECKSIGVERIFY :: tail => run(OP_CHECKSIG :: OP_VERIFY :: tail, stack, state.copy(opCount = opCount - 1), signatureVersion)
+        case OP_CHECKSIGVERIFY :: tail => run(OP_CHECKSIG :: OP_VERIFY :: tail, stack, state.copy(opCount = opCount - 1))
         case OP_CHECKMULTISIG :: tail => {
           // pop public keys
           val m = decodeNumber(stack.head).toInt
@@ -652,74 +670,79 @@ object Script {
           if ((scriptFlag & ScriptFlags.SCRIPT_VERIFY_NULLDUMMY) != 0) require(stack3(n).isEmpty, "multisig dummy is not empty")
           val stack4 = stack3.drop(n + 1)
 
-          // Drop the signature in pre-segwit scripts but not segwit scripts
-          val scriptCode1 = if (signatureVersion == SigVersion.SIGVERSION_BASE) {
-            removeSignatures(scriptCode, sigs.map(bytes => BinaryData(bytes)))
-          } else {
-            scriptCode
-          }
-          val success = checkSignatures(pubKeys, sigs, Script.write(scriptCode1), signatureVersion)
+          // Remove signature for pre-fork scripts
+          val scriptCode1 = sigs.foldLeft(scriptCode)((scriptCode, sigBytes) => if ((scriptFlag & SCRIPT_ENABLE_SIGHASH_FORKID) == 0 || !isForkId(getHashType(sigBytes))) removeSignature(scriptCode, sigBytes) else scriptCode)
+          val success = checkSignatures(pubKeys, sigs, Script.write(scriptCode1))
           if (!success && (scriptFlag & SCRIPT_VERIFY_NULLFAIL) != 0) {
             sigs.foreach(sig => require(sig.isEmpty, "Signature must be zero for failed CHECKMULTISIG operation"))
           }
-          run(tail, (if (success) True else False) :: stack4, state.copy(opCount = nextOpCount), signatureVersion)
+          run(tail, (if (success) True else False) :: stack4, state.copy(opCount = nextOpCount))
         }
-        case OP_CHECKMULTISIGVERIFY :: tail => run(OP_CHECKMULTISIG :: OP_VERIFY :: tail, stack, state.copy(opCount = opCount - 1), signatureVersion)
-        case OP_CODESEPARATOR :: tail => run(tail, stack, state.copy(opCount = opCount + 1, scriptCode = tail), signatureVersion)
-        case OP_DEPTH :: tail => run(tail, encodeNumber(stack.length) :: stack, state.copy(opCount = opCount + 1), signatureVersion)
+        case OP_CHECKMULTISIGVERIFY :: tail => run(OP_CHECKMULTISIG :: OP_VERIFY :: tail, stack, state.copy(opCount = opCount - 1))
+        case OP_CODESEPARATOR :: tail => run(tail, stack, state.copy(opCount = opCount + 1, scriptCode = tail))
+        case OP_DEPTH :: tail => run(tail, encodeNumber(stack.length) :: stack, state.copy(opCount = opCount + 1))
+        case OP_DIV :: tail => stack match {
+          case x1 :: x2 :: stacktail =>
+            val bn1 = decodeNumber(x2)
+            val bn2 = decodeNumber(x1)
+            if (bn2 == 0) throw new RuntimeException("cannot run OP_DIV with denominator equals to 0")
+            val result = bn1 / bn2
+            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1))
+          case _ => throw new RuntimeException("cannot run OP_DIV on a stack of less than 2 elements")
+        }
         case OP_SIZE :: _ if stack.isEmpty => throw new RuntimeException("Cannot run OP_SIZE on an empty stack")
-        case OP_SIZE :: tail => run(tail, encodeNumber(stack.head.length) :: stack, state.copy(opCount = opCount + 1), signatureVersion)
-        case OP_DROP :: tail => run(tail, stack.tail, state.copy(opCount = opCount + 1), signatureVersion)
-        case OP_2DROP :: tail => run(tail, stack.tail.tail, state.copy(opCount = opCount + 1), signatureVersion)
-        case OP_DUP :: tail => run(tail, stack.head :: stack, state.copy(opCount = opCount + 1), signatureVersion)
+        case OP_SIZE :: tail => run(tail, encodeNumber(stack.head.length) :: stack, state.copy(opCount = opCount + 1))
+        case OP_DROP :: tail => run(tail, stack.tail, state.copy(opCount = opCount + 1))
+        case OP_2DROP :: tail => run(tail, stack.tail.tail, state.copy(opCount = opCount + 1))
+        case OP_DUP :: tail => run(tail, stack.head :: stack, state.copy(opCount = opCount + 1))
         case OP_2DUP :: tail => stack match {
-          case x1 :: x2 :: stacktail => run(tail, x1 :: x2 :: x1 :: x2 :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+          case x1 :: x2 :: stacktail => run(tail, x1 :: x2 :: x1 :: x2 :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_2DUP on a stack with less than 2 elements")
         }
         case OP_3DUP :: tail => stack match {
-          case x1 :: x2 :: x3 :: stacktail => run(tail, x1 :: x2 :: x3 :: x1 :: x2 :: x3 :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+          case x1 :: x2 :: x3 :: stacktail => run(tail, x1 :: x2 :: x3 :: x1 :: x2 :: x3 :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_3DUP on a stack with less than 3 elements")
         }
         case OP_EQUAL :: tail => stack match {
-          case a :: b :: stacktail if a != b => run(tail, False :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
-          case a :: b :: stacktail => run(tail, True :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+          case a :: b :: stacktail if a != b => run(tail, False :: stacktail, state.copy(opCount = opCount + 1))
+          case a :: b :: stacktail => run(tail, True :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_EQUAL on a stack with less than 2 elements")
         }
         case OP_EQUALVERIFY :: tail => stack match {
           case a :: b :: _ if a != b => throw new RuntimeException("OP_EQUALVERIFY failed: elements are different")
-          case a :: b :: stacktail => run(tail, stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+          case a :: b :: stacktail => run(tail, stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_EQUALVERIFY on a stack with less than 2 elements")
         }
-        case OP_FROMALTSTACK :: tail => run(tail, altstack.head :: stack, state.copy(altstack = altstack.tail), signatureVersion)
-        case OP_HASH160 :: tail => run(tail, Crypto.hash160(stack.head) :: stack.tail, state.copy(opCount = opCount + 1), signatureVersion)
-        case OP_HASH256 :: tail => run(tail, Crypto.hash256(stack.head) :: stack.tail, state.copy(opCount = opCount + 1), signatureVersion)
+        case OP_FROMALTSTACK :: tail => run(tail, altstack.head :: stack, state.copy(altstack = altstack.tail))
+        case OP_HASH160 :: tail => run(tail, Crypto.hash160(stack.head) :: stack.tail, state.copy(opCount = opCount + 1))
+        case OP_HASH256 :: tail => run(tail, Crypto.hash256(stack.head) :: stack.tail, state.copy(opCount = opCount + 1))
         case OP_IFDUP :: tail => stack match {
           case Nil => throw new RuntimeException("Cannot perform OP_IFDUP on an empty stack")
-          case head :: _ if castToBoolean(head) => run(tail, head :: stack, state.copy(opCount = opCount + 1), signatureVersion)
-          case _ => run(tail, stack, state.copy(opCount = opCount + 1), signatureVersion)
+          case head :: _ if castToBoolean(head) => run(tail, head :: stack, state.copy(opCount = opCount + 1))
+          case _ => run(tail, stack, state.copy(opCount = opCount + 1))
         }
         case OP_LESSTHAN :: tail => stack match {
           case x1 :: x2 :: stacktail =>
             val result = if (decodeNumber(x2) < decodeNumber(x1)) 1 else 0
-            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_LESSTHAN on a stack with less than 2 elements")
         }
         case OP_LESSTHANOREQUAL :: tail => stack match {
           case x1 :: x2 :: stacktail =>
             val result = if (decodeNumber(x2) <= decodeNumber(x1)) 1 else 0
-            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_LESSTHANOREQUAL on a stack with less than 2 elements")
         }
         case OP_GREATERTHAN :: tail => stack match {
           case x1 :: x2 :: stacktail =>
             val result = if (decodeNumber(x2) > decodeNumber(x1)) 1 else 0
-            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_GREATERTHAN on a stack with less than 2 elements")
         }
         case OP_GREATERTHANOREQUAL :: tail => stack match {
           case x1 :: x2 :: stacktail =>
             val result = if (decodeNumber(x2) >= decodeNumber(x1)) 1 else 0
-            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_GREATERTHANOREQUAL on a stack with less than 2 elements")
         }
         case OP_MAX :: tail => stack match {
@@ -727,7 +750,7 @@ object Script {
             val n1 = decodeNumber(x1)
             val n2 = decodeNumber(x2)
             val result = if (n1 > n2) n1 else n2
-            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_MAX on a stack with less than 2 elements")
         }
         case OP_MIN :: tail => stack match {
@@ -735,96 +758,135 @@ object Script {
             val n1 = decodeNumber(x1)
             val n2 = decodeNumber(x2)
             val result = if (n1 < n2) n1 else n2
-            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_MIN on a stack with less than 2 elements")
         }
+        case OP_MOD :: tail => stack match {
+          case x1 :: x2 :: stacktail =>
+            val bn1 = decodeNumber(x2)
+            val bn2 = decodeNumber(x1)
+            if (bn2 == 0) throw new RuntimeException("cannot run OP_MOD with divisor equals to 0")
+            val result = bn1 % bn2
+            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1))
+          case _ => throw new RuntimeException("cannot run OP_MOD on a stack of less than 2 elements")
+        }
         case OP_NEGATE :: tail if stack.isEmpty => throw new RuntimeException("cannot run OP_NEGATE on am empty stack")
-        case OP_NEGATE :: tail => run(tail, encodeNumber(-decodeNumber(stack.head)) :: stack.tail, state.copy(opCount = opCount + 1), signatureVersion)
+        case OP_NEGATE :: tail => run(tail, encodeNumber(-decodeNumber(stack.head)) :: stack.tail, state.copy(opCount = opCount + 1))
         case OP_NIP :: tail => stack match {
-          case x1 :: x2 :: stacktail => run(tail, x1 :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+          case x1 :: x2 :: stacktail => run(tail, x1 :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_NIP on a stack with less than 2 elements")
         }
         case OP_NOT :: tail if stack.isEmpty => throw new RuntimeException("cannot run OP_NOT on am empty stack")
-        case OP_NOT :: tail => run(tail, encodeNumber(if (decodeNumber(stack.head) == 0) 1 else 0) :: stack.tail, state.copy(opCount = opCount + 1), signatureVersion)
+        case OP_NOT :: tail => run(tail, encodeNumber(if (decodeNumber(stack.head) == 0) 1 else 0) :: stack.tail, state.copy(opCount = opCount + 1))
         case OP_0NOTEQUAL :: tail if stack.isEmpty => throw new RuntimeException("cannot run OP_0NOTEQUAL on am empty stack")
-        case OP_0NOTEQUAL :: tail => run(tail, encodeNumber(if (decodeNumber(stack.head) == 0) 0 else 1) :: stack.tail, state.copy(opCount = opCount + 1), signatureVersion)
+        case OP_0NOTEQUAL :: tail => run(tail, encodeNumber(if (decodeNumber(stack.head) == 0) 0 else 1) :: stack.tail, state.copy(opCount = opCount + 1))
+        case OP_NUM2BIN :: tail => stack match {
+          case x1 :: x2 :: stacktail =>
+            val size = decodeNumber(x1)
+            if (size > MaxScriptElementSize) throw new RuntimeException("number of bytes requested it too big")
+            val rawnum = encodeNumber(Script.decodeNumber(x2, false, Int.MaxValue)).data
+            if (rawnum.size > size) throw new RuntimeException("unable to fit the number in the number of byte requested")
+            val result = if (rawnum.size == size) rawnum
+            else if (rawnum.isEmpty) (1 to size.toInt).map(_ => 0.toByte)
+            else {
+              val signbit = (rawnum.last & 0x80).toByte
+              val zeros = (rawnum.size until (size.toInt - 1)).map(_ => 0x00.toByte)
+              rawnum.take(rawnum.size - 1) ++ Seq((rawnum.last & 0x7f).toByte) ++ zeros ++ Seq(signbit)
+            }
+            run(tail, result :: stacktail, state.copy(opCount = opCount + 1))
+          case _ => throw new RuntimeException("cannot run OP_NUM2BIN on a stack of less than 2 elements")
+        }
         case OP_NUMEQUAL :: tail => stack match {
           case x1 :: x2 :: stacktail =>
             val result = if (decodeNumber(x1) == decodeNumber(x2)) 1 else 0
-            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_NUMEQUAL on a stack with less than 2 elements")
         }
         case OP_NUMEQUALVERIFY :: tail => stack match {
           case x1 :: x2 :: stacktail =>
             if (decodeNumber(x1) != decodeNumber(x2)) throw new RuntimeException("OP_NUMEQUALVERIFY failed")
-            run(tail, stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_NUMEQUALVERIFY on a stack with less than 2 elements")
         }
         case OP_NUMNOTEQUAL :: tail => stack match {
           case x1 :: x2 :: stacktail =>
             val result = if (decodeNumber(x1) != decodeNumber(x2)) 1 else 0
-            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_NUMNOTEQUAL on a stack with less than 2 elements")
         }
+        case OP_OR :: tail => stack match {
+          case x1 :: x2 :: stacktail =>
+            if (x1.length != x2.length) throw new RuntimeException("inputs must be the same size")
+            val result = (x2 zip x1).map { case (ch1, ch2) => (ch1 | ch2).toByte }
+            run(tail, result :: stacktail, state.copy(opCount = opCount + 1))
+          case _ => throw new RuntimeException("cannot run OP_OR on a stack of less than 2 elements")
+        }
         case OP_OVER :: tail => stack match {
-          case _ :: x2 :: _ => run(tail, x2 :: stack, state.copy(opCount = opCount + 1), signatureVersion)
+          case _ :: x2 :: _ => run(tail, x2 :: stack, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_OVER on a stack with less than 2 elements")
         }
         case OP_2OVER :: tail => stack match {
-          case _ :: _ :: x3 :: x4 :: _ => run(tail, x3 :: x4 :: stack, state.copy(opCount = opCount + 1), signatureVersion)
+          case _ :: _ :: x3 :: x4 :: _ => run(tail, x3 :: x4 :: stack, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_2OVER on a stack with less than 4 elements")
         }
         case OP_PICK :: tail => stack match {
           case head :: stacktail =>
             val n = decodeNumber(head).toInt
-            run(tail, stacktail(n) :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, stacktail(n) :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_PICK on a stack with less than 1 elements")
         }
         case OP_PUSHDATA(data, code) :: _ if ((scriptFlag & SCRIPT_VERIFY_MINIMALDATA) != 0) && !OP_PUSHDATA.isMinimal(data, code) => {
           throw new RuntimeException("not minimal push")
         }
-        case OP_PUSHDATA(data, _) :: tail => run(tail, data.toSeq :: stack, state, signatureVersion)
+        case OP_PUSHDATA(data, _) :: tail => run(tail, data.toSeq :: stack, state)
         case OP_ROLL :: tail => stack match {
           case head :: stacktail =>
             val n = decodeNumber(head).toInt
-            run(tail, stacktail(n) :: stacktail.take(n) ::: stacktail.takeRight(stacktail.length - 1 - n), state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, stacktail(n) :: stacktail.take(n) ::: stacktail.takeRight(stacktail.length - 1 - n), state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_ROLL on a stack with less than 1 elements")
         }
         case OP_ROT :: tail => stack match {
-          case x1 :: x2 :: x3 :: stacktail => run(tail, x3 :: x1 :: x2 :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+          case x1 :: x2 :: x3 :: stacktail => run(tail, x3 :: x1 :: x2 :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_ROT on a stack with less than 3 elements")
         }
         case OP_2ROT :: tail => stack match {
-          case x1 :: x2 :: x3 :: x4 :: x5 :: x6 :: stacktail => run(tail, x5 :: x6 :: x1 :: x2 :: x3 :: x4 :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+          case x1 :: x2 :: x3 :: x4 :: x5 :: x6 :: stacktail => run(tail, x5 :: x6 :: x1 :: x2 :: x3 :: x4 :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_2ROT on a stack with less than 6 elements")
         }
-        case OP_RIPEMD160 :: tail => run(tail, Crypto.ripemd160(stack.head) :: stack.tail, state.copy(opCount = opCount + 1), signatureVersion)
-        case OP_SHA1 :: tail => run(tail, Crypto.sha1(stack.head) :: stack.tail, state.copy(opCount = opCount + 1), signatureVersion)
-        case OP_SHA256 :: tail => run(tail, Crypto.sha256(stack.head) :: stack.tail, state.copy(opCount = opCount + 1), signatureVersion)
+        case OP_RIPEMD160 :: tail => run(tail, Crypto.ripemd160(stack.head) :: stack.tail, state.copy(opCount = opCount + 1))
+        case OP_SHA1 :: tail => run(tail, Crypto.sha1(stack.head) :: stack.tail, state.copy(opCount = opCount + 1))
+        case OP_SHA256 :: tail => run(tail, Crypto.sha256(stack.head) :: stack.tail, state.copy(opCount = opCount + 1))
+        case OP_SPLIT :: tail => stack match {
+          case x1 :: x2 :: stacktail =>
+            val position = decodeNumber(x1)
+            if (position < 0 || position > x2.length) throw new RuntimeException("split point is not apropriate")
+            val (n1, n2) = x2.splitAt(position.toInt)
+            run(tail, n2 :: n1 :: stacktail, state.copy(opCount = opCount + 1))
+          case _ => throw new RuntimeException("cannot run OP_SPLIT on a stack of less than 2 elements")
+        }
         case OP_SUB :: tail => stack match {
           case x1 :: x2 :: stacktail =>
             val result = decodeNumber(x2) - decodeNumber(x1)
-            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("cannot run OP_SUB on a stack of less than 2 elements")
         }
-
         case OP_SWAP :: tail => stack match {
-          case x1 :: x2 :: stacktail => run(tail, x2 :: x1 :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+          case x1 :: x2 :: stacktail => run(tail, x2 :: x1 :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_SWAP on a stack with less than 2 elements")
         }
         case OP_2SWAP :: tail => stack match {
-          case x1 :: x2 :: x3 :: x4 :: stacktail => run(tail, x3 :: x4 :: x1 :: x2 :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+          case x1 :: x2 :: x3 :: x4 :: stacktail => run(tail, x3 :: x4 :: x1 :: x2 :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_2SWAP on a stack with less than 4 elements")
         }
-        case OP_TOALTSTACK :: tail => run(tail, stack.tail, state.copy(altstack = stack.head :: altstack), signatureVersion)
+        case OP_TOALTSTACK :: tail => run(tail, stack.tail, state.copy(altstack = stack.head :: altstack))
         case OP_TUCK :: tail => stack match {
-          case x1 :: x2 :: stacktail => run(tail, x1 :: x2 :: x1 :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+          case x1 :: x2 :: stacktail => run(tail, x1 :: x2 :: x1 :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_TUCK on a stack with less than 2 elements")
         }
         case OP_VERIFY :: tail => stack match {
           case Nil => throw new RuntimeException("cannot run OP_VERIFY on an empty stack")
           case head :: _ if !castToBoolean(head) => throw new RuntimeException("OP_VERIFY failed")
-          case _ :: stacktail => run(tail, stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+          case _ :: stacktail => run(tail, stacktail, state.copy(opCount = opCount + 1))
         }
         case OP_WITHIN :: tail => stack match {
           case encMax :: encMin :: encN :: stacktail =>
@@ -832,40 +894,18 @@ object Script {
             val min = decodeNumber(encMin)
             val n = decodeNumber(encN)
             val result = if (n >= min && n < max) 1 else 0
-            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1), signatureVersion)
+            run(tail, encodeNumber(result) :: stacktail, state.copy(opCount = opCount + 1))
           case _ => throw new RuntimeException("Cannot perform OP_WITHIN on a stack with less than 3 elements")
+        }
+        case OP_XOR :: tail => stack match {
+          case x1 :: x2 :: stacktail =>
+            if (x1.length != x2.length) throw new RuntimeException("inputs must be the same size")
+            val result = (x2 zip x1).map { case (ch1, ch2) => (ch1 ^ ch2).toByte }
+            run(tail, result :: stacktail, state.copy(opCount = opCount + 1))
+          case _ => throw new RuntimeException("cannot run OP_XOR on a stack of less than 2 elements")
         }
       }
     }
-
-    def verifyWitnessProgram(witness: ScriptWitness, witnessVersion: Long, program: BinaryData): Unit = {
-      val (stack, scriptPubKey) = witnessVersion match {
-        case 0 if program.length == 20 =>
-          // P2WPKH, program is simply the pubkey hash
-          require(witness.stack.length == 2, "Invalid witness program, should have 2 items")
-          (witness.stack, OP_DUP :: OP_HASH160 :: OP_PUSHDATA(program) :: OP_EQUALVERIFY :: OP_CHECKSIG :: Nil)
-        case 0 if program.length == 32 =>
-          // P2WPSH, program is the hash of the script, and witness is the stack + the script
-          val check: BinaryData = Crypto.sha256(witness.stack.last)
-          require(check == program, "witness program mismatch")
-          (witness.stack.dropRight(1), Script.parse(witness.stack.last))
-        case 0 =>
-          throw new IllegalArgumentException(s"Invalid witness program length: ${program.length}")
-        case _ if (scriptFlag & SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM) != 0 =>
-          throw new IllegalArgumentException(s"Invalid witness version: ${witnessVersion}")
-        case _ =>
-          // Higher version witness scripts return true for future softfork compatibility
-          return
-      }
-      stack.foreach(item => require(item.length <= MaxScriptElementSize, "item is bigger than maximum push size"))
-
-      // FIXME: stack.map(...) is fugly
-      val stack1 = run(scriptPubKey, stack.map(_.toSeq).toList.reverse, SigVersion.SIGVERSION_WITNESS_V0)
-      require(stack1.length == 1)
-      require(castToBoolean(stack1.head))
-    }
-
-    def verifyScripts(scriptSig: BinaryData, scriptPubKey: BinaryData): Boolean = verifyScripts(scriptSig, scriptPubKey, ScriptWitness.empty)
 
     /**
       * verify a script sig/script pubkey pair:
@@ -880,7 +920,7 @@ object Script {
       * @param scriptPubKey public key script
       * @return true if the scripts were successfully verified
       */
-    def verifyScripts(scriptSig: BinaryData, scriptPubKey: BinaryData, witness: ScriptWitness): Boolean = {
+    def verifyScripts(scriptSig: BinaryData, scriptPubKey: BinaryData): Boolean = {
       def checkStack(stack: Stack): Boolean = {
         if (stack.isEmpty) false
         else if (!Script.castToBoolean(stack.head)) false
@@ -891,12 +931,9 @@ object Script {
         else true
       }
 
-      if ((scriptFlag & SCRIPT_VERIFY_WITNESS) != 0) {
-        // We can't check for correct unexpected witness data if P2SH was off, so require
-        // that WITNESS implies P2SH. Otherwise, going from WITNESS->P2SH+WITNESS would be
-        // possible, which is not a softfork.
-        require((scriptFlag & SCRIPT_VERIFY_P2SH) != 0)
-      }
+      // If FORKID is enabled, we also ensure strict encoding.
+      if ((scriptFlag & SCRIPT_ENABLE_SIGHASH_FORKID) != 0) scriptFlag |= SCRIPT_VERIFY_STRICTENC
+
       val ssig = Script.parse(scriptSig)
       if (((scriptFlag & SCRIPT_VERIFY_SIGPUSHONLY) != 0) && !Script.isPushOnly(ssig)) throw new RuntimeException("signature script is not PUSH-only")
       val stack = run(ssig)
@@ -906,21 +943,7 @@ object Script {
       require(stack0.nonEmpty, "Script verification failed, stack should not be empty")
       require(castToBoolean(stack0.head), "Script verification failed, stack starts with 'false'")
 
-      var hadWitness = false
-      val stack1 = if ((scriptFlag & SCRIPT_VERIFY_WITNESS) != 0) {
-        spub match {
-          case op :: OP_PUSHDATA(program, code) :: Nil if isSimpleValue(op) && OP_PUSHDATA.isMinimal(program, code) && program.length >= 2 && program.length <= 40 => {
-            hadWitness = true
-            val witnessVersion = simpleValue(op)
-            require(ssig.isEmpty, "Malleated segwit script")
-            verifyWitnessProgram(witness, witnessVersion, program)
-            stack0.take(1)
-          }
-          case _ => stack0
-        }
-      } else stack0
-
-      val stack2 = if (((scriptFlag & SCRIPT_VERIFY_P2SH) != 0) && Script.isPayToScript(scriptPubKey)) {
+      val stack1 = if (((scriptFlag & SCRIPT_VERIFY_P2SH) != 0) && Script.isPayToScript(scriptPubKey)) {
         // scriptSig must be literals-only or validation fails
         if (!Script.isPushOnly(ssig)) throw new RuntimeException("signature script is not PUSH-only")
 
@@ -934,24 +957,10 @@ object Script {
         require(stackp2sh.nonEmpty, "Script verification failed, stack should not be empty")
         require(castToBoolean(stackp2sh.head), "Script verification failed, stack starts with 'false'")
 
-        if ((scriptFlag & SCRIPT_VERIFY_WITNESS) != 0) {
-          Script.parse(stack.head) match {
-            case op :: OP_PUSHDATA(program, _) :: Nil if isSimpleValue(op) && program.length >= 2 && program.length <= 32 => {
-              hadWitness = true
-              val witnessVersion = simpleValue(op)
-              //require(ssig.isEmpty, "Malleated segwit script")
-              verifyWitnessProgram(witness, witnessVersion, program)
-              stackp2sh.take(1)
-            }
-            case _ => stackp2sh
-          }
-        } else stackp2sh
-      } else stack1
+        stackp2sh
+      } else stack0
 
-      if ((scriptFlag & SCRIPT_VERIFY_WITNESS) != 0 && !hadWitness) {
-        require(witness.isNull)
-      }
-      checkStack(stack2)
+      checkStack(stack1)
     }
   }
 
@@ -1028,35 +1037,4 @@ object Script {
     * @return a pay-to-script script
     */
   def pay2sh(script: BinaryData): Seq[ScriptElt] = OP_HASH160 :: OP_PUSHDATA(hash160(script)) :: OP_EQUAL :: Nil
-
-  /**
-    *
-    * @param script bitcoin script
-    * @return a pay-to-witness-script script
-    */
-  def pay2wsh(script: Seq[ScriptElt]): Seq[ScriptElt] = pay2wsh(Script.write(script))
-
-  /**
-    *
-    * @param script bitcoin script
-    * @return a pay-to-witness-script script
-    */
-  def pay2wsh(script: BinaryData): Seq[ScriptElt] = OP_0 :: OP_PUSHDATA(sha256(script)) :: Nil
-
-  /**
-    *
-    * @param pubKeyHash public key hash
-    * @return a pay-to-witness-public-key-hash script
-    */
-  def pay2wpkh(pubKeyHash: BinaryData): Seq[ScriptElt] = {
-    require(pubKeyHash.length == 20, "pubkey hash length must be 20 bytes")
-    OP_0 :: OP_PUSHDATA(pubKeyHash) :: Nil
-  }
-
-  /**
-    *
-    * @param pubKey public key
-    * @return a pay-to-witness-public-key-hash script
-    */
-  def pay2wpkh(pubKey: PublicKey): Seq[ScriptElt] = pay2wpkh(pubKey.hash160)
 }

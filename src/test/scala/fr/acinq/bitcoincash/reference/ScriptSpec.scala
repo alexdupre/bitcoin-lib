@@ -64,8 +64,10 @@ object ScriptSpec {
     "NULLFAIL" -> SCRIPT_VERIFY_NULLFAIL,
     "CHECKLOCKTIMEVERIFY" -> SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,
     "CHECKSEQUENCEVERIFY" -> SCRIPT_VERIFY_CHECKSEQUENCEVERIFY,
-    "WITNESS" -> SCRIPT_VERIFY_WITNESS,
-    "WITNESS_PUBKEYTYPE" -> SCRIPT_VERIFY_WITNESS_PUBKEYTYPE
+    "COMPRESSED_PUBKEYTYPE" -> SCRIPT_VERIFY_COMPRESSED_PUBKEYTYPE,
+    "SIGHASH_FORKID" -> SCRIPT_ENABLE_SIGHASH_FORKID,
+    "REPLAY_PROTECTION" -> SCRIPT_ENABLE_REPLAY_PROTECTION,
+    "MONOLITH_OPCODES" -> SCRIPT_ENABLE_MONOLITH_OPCODES
   )
 
   def parseScriptFlags(strFlags: String): Int = if (strFlags.isEmpty) 0 else strFlags.split(",").map(mapFlagNames(_)).foldLeft(0)(_ | _)
@@ -81,18 +83,17 @@ object ScriptSpec {
     lockTime = 0)
 
   // use 0 btc if no amount is specified
-  def runTest(witnessText: Seq[String], scriptSigText: String, scriptPubKeyText: String, flags: String, comments: Option[String], expectedText: String): Unit =
-    runTest(witnessText, 0 btc, scriptSigText, scriptPubKeyText, flags, comments, expectedText)
+  def runTest(scriptSigText: String, scriptPubKeyText: String, flags: String, comments: Option[String], expectedText: String): Unit =
+    runTest(0 btc, scriptSigText, scriptPubKeyText, flags, comments, expectedText)
 
-  def runTest(witnessText: Seq[String], amount: Btc, scriptSigText: String, scriptPubKeyText: String, flags: String, comments: Option[String], expectedText: String): Unit = {
-    val witness = ScriptWitness(witnessText.map(BinaryData(_)))
+  def runTest(amount: Btc, scriptSigText: String, scriptPubKeyText: String, flags: String, comments: Option[String], expectedText: String): Unit = {
     val scriptPubKey = parseFromText(scriptPubKeyText)
     val scriptSig = parseFromText(scriptSigText)
-    val tx = spendingTx(scriptSig, creditTx(scriptPubKey, amount)).updateWitness(0, witness)
+    val tx = spendingTx(scriptSig, creditTx(scriptPubKey, amount))
     val ctx = Script.Context(tx, 0, amount)
     val runner = new Script.Runner(ctx, parseScriptFlags(flags))
 
-    val result = Try(runner.verifyScripts(scriptSig, scriptPubKey, witness)).getOrElse(false)
+    val result = Try(runner.verifyScripts(scriptSig, scriptPubKey)).getOrElse(false)
     val expected = expectedText == "OK"
     if (result != expected) {
       throw new RuntimeException(comments.getOrElse(""))
@@ -107,32 +108,24 @@ object ScriptSpec {
     json.extract[List[List[JValue]]].tail.foreach(_ match {
       case JString(comment) :: Nil => ()
       case JString(scriptSig) :: JString(scriptPubKey) :: JString(flags) :: JString(expected) :: JString(comments) :: Nil =>
-        ScriptSpec.runTest(Seq.empty[String], scriptSig, scriptPubKey, flags, Some(comments), expected)
+        ScriptSpec.runTest(scriptSig, scriptPubKey, flags, Some(comments), expected)
         count = count + 1
       case JString(scriptSig) :: JString(scriptPubKey) :: JString(flags) :: JString(expected) :: Nil =>
-        ScriptSpec.runTest(Seq.empty[String], scriptSig, scriptPubKey, flags, None, expected)
+        ScriptSpec.runTest(scriptSig, scriptPubKey, flags, None, expected)
         count = count + 1
       case JArray(m) :: JString(scriptSig) :: JString(scriptPubKey) :: JString(flags) :: JString(expected) :: JString(comments) :: Nil =>
-        val witnessText: Seq[String] = m.take(m.length - 1).map {
-          case JString(value) => value
-          case unexpected => throw new RuntimeException(s"expected a witness item (string), got $unexpected")
-        }
         val amount: Btc = m.last match {
           case JDouble(value) => Btc(value)
           case unexpected => throw new RuntimeException(s"expected an amount, got $unexpected")
         }
-        ScriptSpec.runTest(witnessText, amount, scriptSig, scriptPubKey, flags, Some(comments), expected)
+        ScriptSpec.runTest(amount, scriptSig, scriptPubKey, flags, Some(comments), expected)
         count = count + 1
       case JArray(m) :: JString(scriptSig) :: JString(scriptPubKey) :: JString(flags) :: JString(expected) :: Nil =>
-        val witnessText: Seq[String] = m.take(m.length - 1).map {
-          case JString(value) => value
-          case unexpected => throw new RuntimeException(s"expected a witness item (string), got $unexpected")
-        }
         val amount: Btc = m.last match {
           case JDouble(value) => Btc(value)
           case unexpected => throw new RuntimeException(s"expected an amount, got $unexpected")
         }
-        ScriptSpec.runTest(witnessText, amount, scriptSig, scriptPubKey, flags, None, expected)
+        ScriptSpec.runTest(amount, scriptSig, scriptPubKey, flags, None, expected)
         count = count + 1
       case unexpected => throw new RuntimeException(s"cannot parse $unexpected")
     })

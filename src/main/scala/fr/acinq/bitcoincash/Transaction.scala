@@ -6,8 +6,6 @@ import fr.acinq.bitcoincash.Crypto.PrivateKey
 import fr.acinq.bitcoincash.Protocol._
 import fr.acinq.bitcoincash.Script.Runner
 
-import scala.collection.mutable.ArrayBuffer
-
 object OutPoint extends BtcSerializer[OutPoint] {
   def apply(tx: Transaction, index: Int) = new OutPoint(tx.hash, index)
 
@@ -98,12 +96,9 @@ object TxIn extends BtcSerializer[TxIn] {
   * @param signatureScript Signature script which should match the public key script of the output that we want to spend
   * @param sequence        Transaction version as defined by the sender. Intended for "replacement" of transactions when
   *                        information is updated before inclusion into a block. Repurposed for OP_CSV (see BIPs 68 & 112)
-  * @param witness         Transaction witness (i.e. what is in sig script for standard transactions).
   */
-case class TxIn(outPoint: OutPoint, signatureScript: BinaryData, sequence: Long, witness: ScriptWitness = ScriptWitness.empty) extends BtcSerializable[TxIn] {
+case class TxIn(outPoint: OutPoint, signatureScript: BinaryData, sequence: Long) extends BtcSerializable[TxIn] {
   def isFinal: Boolean = sequence == TxIn.SEQUENCE_FINAL
-
-  def hasWitness: Boolean = witness.isNotNull
 
   override def serializer: BtcSerializer[TxIn] = TxIn
 }
@@ -136,86 +131,24 @@ case class TxOut(amount: Satoshi, publicKeyScript: BinaryData) extends BtcSerial
   override def serializer: BtcSerializer[TxOut] = TxOut
 }
 
-object ScriptWitness extends BtcSerializer[ScriptWitness] {
-  val empty = ScriptWitness(Seq.empty[BinaryData])
-
-  override def write(t: ScriptWitness, out: OutputStream, protocolVersion: Long): Unit =
-    writeCollection[BinaryData](t.stack, (b: BinaryData, o: OutputStream, _: Long) => writeScript(b, o), out, protocolVersion)
-
-  override def read(in: InputStream, protocolVersion: Long): ScriptWitness =
-    ScriptWitness(readCollection[BinaryData](in, (i: InputStream, _: Long) => script(i), None, protocolVersion))
-}
-
-/**
-  * a script witness is just a stack of data
-  * there is one script witness per transaction input
-  *
-  * @param stack items to be pushed on the stack
-  */
-case class ScriptWitness(stack: Seq[BinaryData]) extends BtcSerializable[ScriptWitness] {
-  def isNull = stack.isEmpty
-
-  def isNotNull = !isNull
-
-  override def serializer: BtcSerializer[ScriptWitness] = ScriptWitness
-}
-
 object Transaction extends BtcSerializer[Transaction] {
-  val SERIALIZE_TRANSACTION_NO_WITNESS = 0x40000000L
   // if lockTime >= LOCKTIME_THRESHOLD it is a unix timestamp otherwise it is a block height
   val LOCKTIME_THRESHOLD = 500000000L
 
-  /**
-    *
-    * @param version protocol version (and NOT transaction version !)
-    * @return true if protocol version specifies that witness data is to be serialized
-    */
-  def serializeTxWitness(version: Long): Boolean = (version & SERIALIZE_TRANSACTION_NO_WITNESS) == 0
-
-  override def read(input: InputStream, protocolVersion: Long): Transaction = {
-    val tx = Transaction(uint32(input), readCollection[TxIn](input, protocolVersion), Seq.empty[TxOut], 0)
-    val (flags, tx1) = if (tx.txIn.isEmpty && serializeTxWitness(protocolVersion)) {
-      // we just read the 0x00 marker
-      val flags = uint8(input)
-      val txIn = readCollection[TxIn](input, protocolVersion)
-      if (flags == 0 && txIn.nonEmpty) throw new RuntimeException("Extended transaction format unnecessarily used")
-      val txOut = readCollection[TxOut](input, protocolVersion)
-      (flags, tx.copy(txIn = txIn, txOut = txOut))
-    } else (0, tx.copy(txOut = readCollection[TxOut](input, protocolVersion)))
-
-    val tx2 = flags match {
-      case 0 => tx1.copy(lockTime = uint32(input))
-      case 1 =>
-        val witnesses = new ArrayBuffer[ScriptWitness]()
-        for (_ <- tx1.txIn.indices) witnesses += ScriptWitness.read(input, protocolVersion)
-        tx1.updateWitnesses(witnesses).copy(lockTime = uint32(input))
-      case _ => throw new RuntimeException(s"Unknown transaction optional data $flags")
-    }
-
-    tx2
-  }
+  override def read(input: InputStream, protocolVersion: Long): Transaction =
+    Transaction(uint32(input), readCollection[TxIn](input, protocolVersion), readCollection[TxOut](input, protocolVersion), uint32(input))
 
   override def write(tx: Transaction, out: OutputStream, protocolVersion: Long) = {
-    if (serializeTxWitness(protocolVersion) && tx.hasWitness) {
-      writeUInt32(tx.version.toInt, out)
-      writeUInt8(0x00, out)
-      writeUInt8(0x01, out)
-      writeCollection(tx.txIn, out, protocolVersion)
-      writeCollection(tx.txOut, out, protocolVersion)
-      for (i <- tx.txIn.indices) ScriptWitness.write(tx.txIn(i).witness, out, protocolVersion)
-      writeUInt32(tx.lockTime.toInt, out)
-    } else {
-      writeUInt32(tx.version.toInt, out)
-      writeCollection(tx.txIn, out, protocolVersion)
-      writeCollection(tx.txOut, out, protocolVersion)
-      writeUInt32(tx.lockTime.toInt, out)
-    }
+    writeUInt32(tx.version.toInt, out)
+    writeCollection(tx.txIn, out, protocolVersion)
+    writeCollection(tx.txOut, out, protocolVersion)
+    writeUInt32(tx.lockTime.toInt, out)
   }
 
   override def validate(input: Transaction): Unit = {
     require(input.txIn.nonEmpty, "input list cannot be empty")
     require(input.txOut.nonEmpty, "output list cannot be empty")
-    require(totalSize(input) <= MAX_TX_SIZE)
+    require(size(input) <= MAX_TX_SIZE)
     require(input.txOut.map(_.amount.amount).sum >= 0, "sum of outputs amount is invalid")
     require(input.txOut.map(_.amount.amount).sum <= MaxMoney, "sum of outputs amount is invalid")
     input.txIn.foreach(TxIn.validate)
@@ -230,11 +163,7 @@ object Transaction extends BtcSerializer[Transaction] {
     }
   }
 
-  def baseSize(tx: Transaction, protocolVersion: Long = PROTOCOL_VERSION): Int = write(tx, protocolVersion | SERIALIZE_TRANSACTION_NO_WITNESS).length
-
-  def totalSize(tx: Transaction, protocolVersion: Long = PROTOCOL_VERSION): Int = write(tx, protocolVersion).length
-
-  def weight(tx: Transaction, protocolVersion: Long = PROTOCOL_VERSION): Int = totalSize(tx, protocolVersion) + 3 * baseSize(tx, protocolVersion)
+  def size(tx: Transaction, protocolVersion: Long = PROTOCOL_VERSION): Int = write(tx, protocolVersion).length
 
   def isCoinbase(input: Transaction) = input.txIn.size == 1 && OutPoint.isCoinbase(input.txIn(0).outPoint)
 
@@ -299,11 +228,13 @@ object Transaction extends BtcSerializer[Transaction] {
     * @return a hash which can be used to sign the referenced tx input
     */
   def hashForSigning(tx: Transaction, inputIndex: Int, previousOutputScript: BinaryData, sighashType: Int): Seq[Byte] = {
-    if (isHashSingle(sighashType) && inputIndex >= tx.txOut.length) {
+    if (inputIndex >= tx.txIn.length) {
+      Hash.One
+    } else if (isHashSingle(sighashType) && inputIndex >= tx.txOut.length) {
       Hash.One
     } else {
       val txCopy = prepareForSigning(tx, inputIndex, previousOutputScript, sighashType)
-      Crypto.hash256(Transaction.write(txCopy, Transaction.SERIALIZE_TRANSACTION_NO_WITNESS) ++ writeUInt32(sighashType))
+      Crypto.hash256(Transaction.write(txCopy) ++ writeUInt32(sighashType))
     }
   }
 
@@ -325,57 +256,51 @@ object Transaction extends BtcSerializer[Transaction] {
     * @param tx                   input transaction
     * @param inputIndex           index of the tx input that is being processed
     * @param previousOutputScript public key script of the output claimed by this tx input
-    * @param sighashType          signature hash type
+    * @param sigHashType          signature hash type
     * @param amount               amount of the output claimed by this input
     * @return a hash which can be used to sign the referenced tx input
     */
-  def hashForSigning(tx: Transaction, inputIndex: Int, previousOutputScript: BinaryData, sighashType: Int, amount: Satoshi, signatureVersion: Int): Seq[Byte] = {
-    signatureVersion match {
-      case SigVersion.SIGVERSION_WITNESS_V0 =>
-        val hashPrevOut: BinaryData = if (!isAnyoneCanPay(sighashType)) {
-          Crypto.hash256(tx.txIn.map(_.outPoint).flatMap(OutPoint.write(_, Protocol.PROTOCOL_VERSION)))
-        } else Hash.Zeroes
+  def hashForSigning(tx: Transaction, inputIndex: Int, previousOutputScript: BinaryData, sigHashType: Int, amount: Satoshi, flags: Int = ScriptFlags.SCRIPT_ENABLE_SIGHASH_FORKID): Seq[Byte] = {
+    val sighashType = if ((flags & ScriptFlags.SCRIPT_ENABLE_REPLAY_PROTECTION) != 0) {
+      // Legacy chain's value for fork id must be of the form 0xffxxxx.
+      // By xoring with 0xdead, we ensure that the value will be different
+      // from the original one, even if it already starts with 0xff.
+      val newForkValue = (sigHashType >> 8) ^ 0xdead
+      ((0xff0000 | newForkValue) << 8) | (sigHashType & 0xff)
+    } else sigHashType
 
-        val hashSequence: BinaryData = if (!isAnyoneCanPay(sighashType) && !isHashSingle(sighashType) && !isHashNone(sighashType)) {
-          Crypto.hash256(tx.txIn.map(_.sequence).flatMap(s => Protocol.writeUInt32(s.toInt)))
-        } else Hash.Zeroes
+    if (isForkId(sighashType) && (flags & ScriptFlags.SCRIPT_ENABLE_SIGHASH_FORKID) != 0) {
+      val hashPrevOut: BinaryData = if (!isAnyoneCanPay(sighashType)) {
+        Crypto.hash256(tx.txIn.map(_.outPoint).flatMap(OutPoint.write(_, Protocol.PROTOCOL_VERSION)))
+      } else Hash.Zeroes
 
-        val hashOutputs: BinaryData = if (!isHashSingle(sighashType) && !isHashNone(sighashType)) {
-          Crypto.hash256(tx.txOut.flatMap(TxOut.write(_, Protocol.PROTOCOL_VERSION)))
-        } else if (isHashSingle(sighashType) && inputIndex < tx.txOut.size) {
-          Crypto.hash256(TxOut.write(tx.txOut(inputIndex), Protocol.PROTOCOL_VERSION))
-        } else Hash.Zeroes
+      val hashSequence: BinaryData = if (!isAnyoneCanPay(sighashType) && !isHashSingle(sighashType) && !isHashNone(sighashType)) {
+        Crypto.hash256(tx.txIn.map(_.sequence).flatMap(s => Protocol.writeUInt32(s.toInt)))
+      } else Hash.Zeroes
 
-        val out = new ByteArrayOutputStream()
-        Protocol.writeUInt32(tx.version.toInt, out)
-        out.write(hashPrevOut)
-        out.write(hashSequence)
-        out.write(OutPoint.write(tx.txIn(inputIndex).outPoint, Protocol.PROTOCOL_VERSION))
-        Protocol.writeScript(previousOutputScript, out)
-        Protocol.writeUInt64(amount.toLong, out)
-        Protocol.writeUInt32(tx.txIn(inputIndex).sequence.toInt, out)
-        out.write(hashOutputs)
-        Protocol.writeUInt32(tx.lockTime.toInt, out)
-        Protocol.writeUInt32(sighashType, out)
-        val preimage: BinaryData = out.toByteArray
-        Crypto.hash256(preimage)
-      case _ =>
-        hashForSigning(tx, inputIndex, previousOutputScript, sighashType)
+      val hashOutputs: BinaryData = if (!isHashSingle(sighashType) && !isHashNone(sighashType)) {
+        Crypto.hash256(tx.txOut.flatMap(TxOut.write(_, Protocol.PROTOCOL_VERSION)))
+      } else if (isHashSingle(sighashType) && inputIndex < tx.txOut.size) {
+        Crypto.hash256(TxOut.write(tx.txOut(inputIndex), Protocol.PROTOCOL_VERSION))
+      } else Hash.Zeroes
+
+      val out = new ByteArrayOutputStream()
+      Protocol.writeUInt32(tx.version.toInt, out)
+      out.write(hashPrevOut)
+      out.write(hashSequence)
+      out.write(OutPoint.write(tx.txIn(inputIndex).outPoint, Protocol.PROTOCOL_VERSION))
+      Protocol.writeScript(previousOutputScript, out)
+      Protocol.writeUInt64(amount.toLong, out)
+      Protocol.writeUInt32(tx.txIn(inputIndex).sequence.toInt, out)
+      out.write(hashOutputs)
+      Protocol.writeUInt32(tx.lockTime.toInt, out)
+      Protocol.writeUInt32(sighashType, out)
+      val preimage: BinaryData = out.toByteArray
+      Crypto.hash256(preimage)
+    } else {
+      hashForSigning(tx, inputIndex, previousOutputScript, sighashType)
     }
   }
-
-  /**
-    * hash a tx for signing
-    *
-    * @param tx                   input transaction
-    * @param inputIndex           index of the tx input that is being processed
-    * @param previousOutputScript public key script of the output claimed by this tx input
-    * @param sighashType          signature hash type
-    * @param amount               amount of the output claimed by this input
-    * @return a hash which can be used to sign the referenced tx input
-    */
-  def hashForSigning(tx: Transaction, inputIndex: Int, previousOutputScript: Seq[ScriptElt], sighashType: Int, amount: Satoshi, signatureVersion: Int): Seq[Byte] =
-    hashForSigning(tx, inputIndex, Script.write(previousOutputScript), sighashType, amount, signatureVersion)
 
   /**
     * sign a tx input
@@ -385,13 +310,12 @@ object Transaction extends BtcSerializer[Transaction] {
     * @param previousOutputScript public key script of the output claimed by this tx input
     * @param sighashType          signature hash type, which will be appended to the signature
     * @param amount               amount of the output claimed by this tx input
-    * @param signatureVersion     signature version (1: segwit, 0: pre-segwit)
     * @param privateKey           private key
     * @return the encoded signature of this tx for this specific tx input
     */
-  def signInput(tx: Transaction, inputIndex: Int, previousOutputScript: BinaryData, sighashType: Int, amount: Satoshi, signatureVersion: Int, privateKey: PrivateKey): BinaryData = {
-    if (signatureVersion == SigVersion.SIGVERSION_WITNESS_V0) require(privateKey.compressed, "private key must be compressed in segwit")
-    val hash = hashForSigning(tx, inputIndex, previousOutputScript, sighashType, amount, signatureVersion)
+  def signInput(tx: Transaction, inputIndex: Int, previousOutputScript: BinaryData, sighashType: Int, amount: Satoshi, privateKey: PrivateKey): BinaryData = {
+    require(privateKey.compressed, "private key must be compressed")
+    val hash = hashForSigning(tx, inputIndex, previousOutputScript, sighashType, amount)
     val (r, s) = Crypto.sign(hash, privateKey)
     val sig = Crypto.encodeSignature(r, s)
     sig :+ (sighashType.toByte)
@@ -405,25 +329,11 @@ object Transaction extends BtcSerializer[Transaction] {
     * @param previousOutputScript public key script of the output claimed by this tx input
     * @param sighashType          signature hash type, which will be appended to the signature
     * @param amount               amount of the output claimed by this tx input
-    * @param signatureVersion     signature version (1: segwit, 0: pre-segwit)
     * @param privateKey           private key
     * @return the encoded signature of this tx for this specific tx input
     */
-  def signInput(tx: Transaction, inputIndex: Int, previousOutputScript: Seq[ScriptElt], sighashType: Int, amount: Satoshi, signatureVersion: Int, privateKey: PrivateKey): BinaryData =
-    signInput(tx, inputIndex, Script.write(previousOutputScript), sighashType, amount, signatureVersion, privateKey)
-
-  /**
-    *
-    * @param tx                   input transaction
-    * @param inputIndex           index of the tx input that is being processed
-    * @param previousOutputScript public key script of the output claimed by this tx input
-    * @param sighashType          signature hash type, which will be appended to the signature
-    * @param privateKey           private key
-    * @return the encoded signature of this tx for this specific tx input
-    */
-  @deprecated("", since = "0.9.6")
-  def signInput(tx: Transaction, inputIndex: Int, previousOutputScript: BinaryData, sighashType: Int, privateKey: PrivateKey): BinaryData =
-  signInput(tx, inputIndex, previousOutputScript, sighashType, amount = 0 satoshi, signatureVersion = SigVersion.SIGVERSION_BASE, privateKey)
+  def signInput(tx: Transaction, inputIndex: Int, previousOutputScript: Seq[ScriptElt], sighashType: Int, amount: Satoshi, privateKey: PrivateKey): BinaryData =
+    signInput(tx, inputIndex, Script.write(previousOutputScript), sighashType, amount, privateKey)
 
   /**
     * Sign a transaction. Cannot partially sign. All the input are signed with SIGHASH_ALL
@@ -438,7 +348,7 @@ object Transaction extends BtcSerializer[Transaction] {
 
     // sign each input
     val signedInputs = for (i <- input.txIn.indices) yield {
-      val sig = signInput(input, i, signData(i).prevPubKeyScript, SIGHASH_ALL, 0 satoshi, SigVersion.SIGVERSION_BASE, signData(i).privateKey)
+      val sig = signInput(input, i, signData(i).prevPubKeyScript, SIGHASH_ALL | SIGHASH_FORKID, signData(i).amount, signData(i).privateKey)
 
       // this is the public key that is associated with the private key we used for signing
       val publicKey = signData(i).privateKey.publicKey
@@ -458,7 +368,7 @@ object Transaction extends BtcSerializer[Transaction] {
       val amount = prevOutput.amount
       val ctx = Script.Context(tx, i, amount)
       val runner = new Script.Runner(ctx, scriptFlags, callback)
-      if (!runner.verifyScripts(tx.txIn(i).signatureScript, prevOutputScript, tx.txIn(i).witness)) throw new RuntimeException(s"tx ${tx.txid} does not spend its input # $i")
+      if (!runner.verifyScripts(tx.txIn(i).signatureScript, prevOutputScript)) throw new RuntimeException(s"tx ${tx.txid} does not spend its input # $i")
     }
   }
 
@@ -479,7 +389,7 @@ object Transaction extends BtcSerializer[Transaction] {
 }
 
 object SignData {
-  def apply(prevPubKeyScript: Seq[ScriptElt], privateKey: PrivateKey): SignData = new SignData(Script.write(prevPubKeyScript), privateKey)
+  def apply(txOut: TxOut, privateKey: PrivateKey): SignData = new SignData(txOut.publicKeyScript, txOut.amount, privateKey)
 }
 
 /**
@@ -488,7 +398,7 @@ object SignData {
   * @param prevPubKeyScript previous output public key script
   * @param privateKey       private key associated with the previous output public key
   */
-case class SignData(prevPubKeyScript: BinaryData, privateKey: PrivateKey)
+case class SignData(prevPubKeyScript: BinaryData, amount: Satoshi, privateKey: PrivateKey)
 
 /**
   * Transaction
@@ -503,12 +413,8 @@ case class Transaction(version: Long, txIn: Seq[TxIn], txOut: Seq[TxOut], lockTi
   import Transaction._
 
   // standard transaction hash, used to identify transactions (in transactions outputs for example)
-  lazy val hash: BinaryData = Crypto.hash256(Transaction.write(this, SERIALIZE_TRANSACTION_NO_WITNESS))
+  lazy val hash: BinaryData = Crypto.hash256(Transaction.write(this))
   lazy val txid: BinaryData = hash.reverse
-  // witness transaction hash that includes witness data. used to compute the witness commitment included in the coinbase
-  // transaction of segwit blocks
-  lazy val whash: BinaryData = Crypto.hash256(Transaction.write(this))
-  lazy val wtxid: BinaryData = whash.reverse
   lazy val bin: BinaryData = Transaction.write(this)
 
   // this is much easier to use than Scala's default toString
@@ -544,17 +450,6 @@ case class Transaction(version: Long, txIn: Seq[TxIn], txOut: Seq[TxOut], lockTi
     */
   def updateSigScript(i: Int, sigScript: Seq[ScriptElt]): Transaction = updateSigScript(i, Script.write(sigScript))
 
-  def updateWitness(i: Int, witness: ScriptWitness): Transaction = this.copy(txIn = txIn.updated(i, txIn(i).copy(witness = witness)))
-
-  def updateWitnesses(witnesses: Seq[ScriptWitness]): Transaction = {
-    require(witnesses.length == txIn.length)
-    witnesses.zipWithIndex.foldLeft(this) {
-      case (tx, (witness, index)) => tx.updateWitness(index, witness)
-    }
-  }
-
-  def hasWitness: Boolean = txIn.exists(_.hasWitness)
-
   /**
     *
     * @param input input to add the tx
@@ -569,11 +464,7 @@ case class Transaction(version: Long, txIn: Seq[TxIn], txOut: Seq[TxOut], lockTi
     */
   def addOutput(output: TxOut): Transaction = this.copy(txOut = this.txOut :+ output)
 
-  def baseSize(protocolVersion: Long = PROTOCOL_VERSION): Int = Transaction.baseSize(this, protocolVersion)
-
-  def totalSize(protocolVersion: Long = PROTOCOL_VERSION): Int = Transaction.totalSize(this, protocolVersion)
-
-  def weight(protocolVersion: Long = PROTOCOL_VERSION): Int = Transaction.weight(this, protocolVersion)
+  def size(protocolVersion: Long = PROTOCOL_VERSION): Int = Transaction.size(this, protocolVersion)
 
   override def serializer: BtcSerializer[Transaction] = Transaction
 }

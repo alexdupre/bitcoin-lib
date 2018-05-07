@@ -54,9 +54,9 @@ case object OP_ROT extends ScriptElt
 case object OP_SWAP extends ScriptElt
 case object OP_TUCK extends ScriptElt
 case object OP_CAT extends ScriptElt
-case object OP_SUBSTR extends ScriptElt
-case object OP_LEFT extends ScriptElt
-case object OP_RIGHT extends ScriptElt
+case object OP_SPLIT extends ScriptElt
+case object OP_NUM2BIN extends ScriptElt
+case object OP_BIN2NUM extends ScriptElt
 case object OP_SIZE extends ScriptElt
 case object OP_INVERT extends ScriptElt
 case object OP_AND extends ScriptElt
@@ -191,9 +191,9 @@ object ScriptElt {
     0x7c -> OP_SWAP,
     0x7d -> OP_TUCK,
     0x7e -> OP_CAT,
-    0x7f -> OP_SUBSTR,
-    0x80 -> OP_LEFT,
-    0x81 -> OP_RIGHT,
+    0x7f -> OP_SPLIT,
+    0x80 -> OP_NUM2BIN,
+    0x81 -> OP_BIN2NUM,
     0x82 -> OP_SIZE,
     0x83 -> OP_INVERT,
     0x84 -> OP_AND,

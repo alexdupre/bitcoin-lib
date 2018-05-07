@@ -216,24 +216,8 @@ object DeterministicWallet {
   val xprv = 0x0488ade4
   val xpub = 0x0488b21e
 
-  // p2sh-of-p2wpkh mainnet
-  val yprv = 0x049d7878
-  val ypub = 0x049d7cb2
-
-  // p2wpkh mainnet
-  val zprv = 0x04b2430c
-  val zpub = 0x04b24746
-
   // p2pkh testnet
   val tprv = 0x04358394
   val tpub = 0x043587cf
-
-  // p2sh-of-p2wpkh testnet
-  val uprv = 0x044a4e28
-  val upub = 0x044a5262
-
-  // p2wpkh testnet
-  val vprv = 0x045f18bc
-  val vpub = 0x045f1cf6
 }
 
