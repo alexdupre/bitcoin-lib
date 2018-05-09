@@ -1,6 +1,6 @@
 # Simple Scala Bitcoin Cash Library
 
-Simple bitcoin library written in Scala.
+Simple bitcoin cash library written in Scala.
 
 [![Build Status](https://travis-ci.org/alexdupre/bitcoincash-lib.png?branch=bch)](https://travis-ci.org/alexdupre/bitcoincash-lib)
 
