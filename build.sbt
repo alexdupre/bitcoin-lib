@@ -1,4 +1,4 @@
-organization := "fr.acinq"
+organization := "com.alexdupre"
 
 name := "bitcoincash-lib"
 
