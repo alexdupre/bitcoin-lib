@@ -4,9 +4,9 @@ name := "bitcoincash-lib"
 
 version := "0.9.18-SNAPSHOT"
 
-crossScalaVersions := Seq("2.11.12", "2.12.5")
+crossScalaVersions := Seq("2.11.12", "2.12.6")
 
-scalaVersion := "2.12.5"
+scalaVersion := "2.12.6"
 
 scalacOptions ++= Seq("-deprecation", "-feature", "-language:implicitConversions,postfixOps")
 
