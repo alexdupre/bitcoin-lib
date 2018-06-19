@@ -35,10 +35,10 @@ Our goal is not to re-implement a full Bitcoin Cash node but to build a library 
 * releases and milestones are pushed to maven central
 
 ```scala
-libraryDependencies += "com.alexdupre" %% "bitcoincash-lib" % "0.9.17"
+libraryDependencies += "com.alexdupre" %% "bitcoincash-lib" % "0.9.18"
 ```
 
-The latest released version is 0.9.17
+The latest released version is 0.9.18
 
 ## Usage
 
@@ -73,7 +73,7 @@ pub: com.alexdupre.bitcoincash.Crypto.PublicKey = 03f028892bad7ed57d2fb57bf33081
 scala> Base58Check.encode(Base58.Prefix.PubkeyAddress, pub.hash160)
 res0: String = 1J7mdg5rbQyUHENYdx39WVWK7fsLpEoXZy
 
-scala> CashAddr.encodeAddress("bitcoincash", 0, pub.hash160)
+scala> CashAddr.encodeAddress("bitcoincash", CashAddr.Type.PubKey, pub.hash160)
 res1: String = bitcoincash:qzaurep288g95nxxzafdd93m0a5apxaj0vua73mjlc
 
 scala> Base58Check.encode(Base58.Prefix.SecretKey, priv.toBin)
@@ -102,7 +102,7 @@ This sample demonstrates how to serialize, create and verify simple P2PKH transa
 
   // we have a tx that was sent to a public key that we own
   val to = "qqd4h24jfqnpg3gaqyxenzkerhyzy76kmglydcjql7"
-  val ("bchtest", 0, pubkeyHash) = CashAddr.decodeAddressTolerant(to)
+  val ("bchtest", CashAddr.Type.PubKey, pubkeyHash) = CashAddr.decodeAddressTolerant(to)
   val amount = 10000 satoshi
 
   val privateKey = PrivateKey.fromBase58("cRp4uUnreGMZN8vB7nQFX6XWMHU5Lc73HMAhmcDEwHfbgRS66Cqp", Base58.Prefix.SecretKeyTestnet)
@@ -154,7 +154,7 @@ This sample demonstrates how to serialize, create and verify a multisig P2SH tra
 ```scala
   val priv1 = PrivateKey.fromBase58("Kz9AqYfHrH2aBKdLLygaw8m6sNoarUs5jBsBeJxZ1ciZbAt1yZQF", Base58.Prefix.SecretKey)
   val pub1 = priv1.publicKey
-  val address1 = CashAddr.encodeAddress("bitcoincash", 0, pub1.hash160)
+  val address1 = CashAddr.encodeAddress("bitcoincash", CashAddr.Type.PubKey, pub1.hash160)
 
   assert(address1 == "bitcoincash:qq8kvdgaq5nfj53s9fs8knt0k623wwr6jugt8k3crk")
 
