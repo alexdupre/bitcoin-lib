@@ -3,9 +3,15 @@ package com.alexdupre.bitcoincash
 import scala.util.Try
 
 /**
-  * See https://github.com/bitcoincashorg/spec/blob/master/cashaddr.md
+  * See https://github.com/bitcoincashorg/bitcoincash.org/blob/master/spec/cashaddr.md
   */
 object CashAddr {
+
+  object Type {
+    val PubKey = 0.toByte
+    val Script = 1.toByte
+  }
+
   val alphabet = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 
   // 5 bits integer
@@ -108,12 +114,24 @@ object CashAddr {
     * encode a bitcoin cash address
     *
     * @param hrp            should be "bitcoincash" or "bchtest"
-    * @param version        version (0 to 16, only 0 = P2PKH and 8 = P2SH are currently defined)
+    * @param type           type (0 to 15, only 0 = P2PKH and 1 = P2SH are currently defined)
     * @param data           hash: 20 bytes (P2PKH or P2SH)
     * @return a cashaddr encoded witness address
     */
-  def encodeAddress(hrp: String, version: Byte, data: BinaryData): String = {
-    val data1 = CashAddr.eight2five(version +: data)
+  def encodeAddress(hrp: String, `type`: Byte, data: BinaryData): String = {
+    val size = (data.length * 8) match {
+      case 160 => 0
+      case 192 => 1
+      case 224 => 2
+      case 256 => 3
+      case 320 => 4
+      case 384 => 5
+      case 448 => 6
+      case 512 => 7
+      case _ => throw new IllegalArgumentException("requirement failed: invalid address length")
+    }
+    val version = (`type` << 3) | size
+    val data1 = CashAddr.eight2five(version.toByte +: data)
     val checksum = CashAddr.checksum(hrp, data1)
     hrp + ":" + new String((data1 ++ checksum).map(i => CashAddr.pam(i)).toArray)
   }
@@ -122,7 +140,7 @@ object CashAddr {
     * decode a bitcoin cash address
     *
     * @param address address
-    * @return a (prefix, version, hash) tuple
+    * @return a (prefix, type, hash) tuple
     */
   def decodeAddress(address: String): (String, Byte, BinaryData) = {
     val SIZE = Seq(160, 192, 224, 256, 320, 384, 448, 512)
@@ -136,14 +154,15 @@ object CashAddr {
     val hashSize = SIZE(version & 0x07)
     val bin = bin1.drop(1)
     require(bin.length == hashSize / 8, s"invalid hash length ${bin.length}")
-    (hrp, version, bin)
+    val `type` = (version >> 3) & 0x0f
+    (hrp, version.toByte, bin)
   }
 
   /**
     * decode a bitcoin cash address
     *
     * @param address address (optional prefix)
-    * @return a (prefix, version, hash) tuple
+    * @return a (prefix, type, hash) tuple
     */
   def decodeAddressTolerant(address: String): (String, Byte, BinaryData) = {
     if (address.contains(':')) decodeAddress(address)

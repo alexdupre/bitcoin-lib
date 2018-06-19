@@ -144,6 +144,6 @@ package object bitcoincash {
       case Block.RegtestGenesisBlock.hash => "bchreg"
       case _ => throw new IllegalArgumentException("Unknown chain hash: " + chainHash)
     }
-    CashAddr.encodeAddress(hrp, 0, hash)
+    CashAddr.encodeAddress(hrp, CashAddr.Type.PubKey, hash)
   }
 }

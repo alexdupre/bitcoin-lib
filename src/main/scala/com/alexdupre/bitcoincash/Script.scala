@@ -68,10 +68,6 @@ object ScriptFlags {
   // See BIP112 for details
   val SCRIPT_VERIFY_CHECKSEQUENCEVERIFY = (1 << 10)
 
-  // Making v2-v16 witness program non-standard
-  //
-  val SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM = (1 << 12)
-
   // Segwit script only: Require the argument of OP_IF/NOTIF to be exactly 0x01 or empty vector
   //
   val SCRIPT_VERIFY_MINIMALIF = (1 << 13)
@@ -123,8 +119,7 @@ object ScriptFlags {
     SCRIPT_VERIFY_NULLFAIL |
     SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY |
     SCRIPT_VERIFY_CHECKSEQUENCEVERIFY |
-    SCRIPT_VERIFY_LOW_S |
-    SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM
+    SCRIPT_VERIFY_LOW_S
 
   /** For convenience, standard but not mandatory verify flags. */
   val STANDARD_NOT_MANDATORY_VERIFY_FLAGS = STANDARD_SCRIPT_VERIFY_FLAGS & ~MANDATORY_SCRIPT_VERIFY_FLAGS

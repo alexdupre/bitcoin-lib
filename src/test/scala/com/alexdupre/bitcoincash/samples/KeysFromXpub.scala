@@ -15,13 +15,13 @@ object KeysFromXpub extends App {
       case DeterministicWallet.tpub =>
         for (i <- 0L to 5L) {
           val pub = DeterministicWallet.derivePublicKey(master, 0L :: i :: Nil)
-          val address = CashAddr.encodeAddress("bchtest", 0, pub.publicKey.hash160)
+          val address = CashAddr.encodeAddress("bchtest", CashAddr.Type.PubKey, pub.publicKey.hash160)
           println(s"$pub $address")
         }
       case DeterministicWallet.xpub =>
         for (i <- 0L to 5L) {
           val pub = DeterministicWallet.derivePublicKey(master, 0L :: i :: Nil)
-          val address = CashAddr.encodeAddress("bitcoincash", 0, pub.publicKey.hash160)
+          val address = CashAddr.encodeAddress("bitcoincash", CashAddr.Type.PubKey, pub.publicKey.hash160)
           println(s"$pub $address")
         }
     }

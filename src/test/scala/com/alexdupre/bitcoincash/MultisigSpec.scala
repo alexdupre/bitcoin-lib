@@ -27,7 +27,7 @@ class MultisigSpec extends FunSuite with Matchers {
 
     // 196 = prefix for P2SH adress on testnet
     Base58Check.encode(Prefix.ScriptAddressTestnet, multisigAddress) should equal("2N8epCi6GwVDNYgJ7YtQ3qQ9vGQzaGu6JY4")
-    CashAddr.encodeAddress("bchtest", 8, multisigAddress) should equal("bchtest:pz5sqqa5mhh5her0cc087gt8m2wjxj2yugc32wkgg5")
+    CashAddr.encodeAddress("bchtest", CashAddr.Type.Script, multisigAddress) should equal("bchtest:pz5sqqa5mhh5her0cc087gt8m2wjxj2yugc32wkgg5")
 
     // we want to redeem the second output of 80c8d2093c98be31b825d1aaf7827baf5aa5d7de137f3ffaef2871861866c375
     // using our private key 92TgRLMLLdwJjT1JrrmTTWEpZ8uG7zpHEgSVPTbwfAs27RpdeWM
