@@ -150,7 +150,7 @@ package object litecoin {
     val script = Script.pay2wpkh(pub)
     val hash = Crypto.hash160(Script.write(script))
     chainHash match {
-      case Block.RegtestGenesisBlock.hash | Block.TestnetGenesisBlock.hash => Base58Check.encode(Base58.Prefix.ScriptAddressTestnet, hash)
+      case Block.RegtestGenesisBlock.hash | Block.TestnetGenesisBlock.hash => Base58Check.encode(Base58.Prefix.ScriptAddress2Testnet, hash)
       case Block.LivenetGenesisBlock.hash => Base58Check.encode(Base58.Prefix.ScriptAddress, hash)
       case _ => throw new IllegalArgumentException("Unknown chain hash: " + chainHash)
     }

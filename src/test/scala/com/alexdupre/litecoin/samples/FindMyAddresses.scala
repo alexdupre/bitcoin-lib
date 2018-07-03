@@ -15,7 +15,7 @@ object FindMyAddresses extends App {
   val testnet = true
 
   // A BIP49 wallet would use p2sh-of-p2wpkh
-  def address(pub: PublicKey): String = Base58Check.encode(if (testnet) Base58.Prefix.ScriptAddressTestnet else Base58.Prefix.ScriptAddress, Crypto.hash160(Script.write(Script.pay2wpkh(pub))))
+  def address(pub: PublicKey): String = Base58Check.encode(if (testnet) Base58.Prefix.ScriptAddress2Testnet else Base58.Prefix.ScriptAddress2, Crypto.hash160(Script.write(Script.pay2wpkh(pub))))
 
   // step #1: compute the seed from the mnemonic code
   val seed = MnemonicCode.toSeed(mnemonics.split(' '), passphrase)
