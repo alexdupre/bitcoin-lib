@@ -1,6 +1,6 @@
-organization := "fr.acinq"
+organization := "com.alexdupre"
 
-name := "bitcoin-lib"
+name := "litecoin-lib"
 
 version := "0.9.18-SNAPSHOT"
 
@@ -31,3 +31,37 @@ gitSubmoduleUpdateTask := {
 compile in Compile := (compile in Compile).dependsOn(gitSubmoduleUpdateTask).value
 
 unmanagedSourceDirectories in Compile += baseDirectory.value / "secp256k1" / "src"
+
+publishMavenStyle := true
+
+publishTo := {
+  val nexus = "https://oss.sonatype.org/"
+  if (isSnapshot.value)
+    Some("snapshots" at nexus + "content/repositories/snapshots")
+  else
+    Some("releases" at nexus + "service/local/staging/deploy/maven2")
+}
+
+pomIncludeRepository := { _ =>
+  false
+}
+
+pomExtra := (<url>https://github.com/alexdupre/litecoin-lib</url>
+  <licenses>
+    <license>
+      <name>Apache 2</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+  <scm>
+    <url>git@github.com:alexdupre/litecoin-lib.git</url>
+    <connection>scm:git:git@github.com:alexdupre/litecoin-lib.git</connection>
+  </scm>
+  <developers>
+    <developer>
+      <id>alexdupre</id>
+      <name>Alex Dupre</name>
+      <url>http://www.alexdupre.com</url>
+    </developer>
+  </developers>)
