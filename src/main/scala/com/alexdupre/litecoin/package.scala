@@ -11,7 +11,7 @@ import org.spongycastle.util.encoders.Hex
 package object litecoin {
   val Coin = 100000000L
   val Cent = 1000000L
-  val MaxMoney = 21000000 * Coin
+  val MaxMoney = 84000000 * Coin
   val MaxScriptElementSize = 520
 
   val MAX_BLOCK_WEIGHT = 4000000
