@@ -15,7 +15,7 @@ import scala.util.Random
 class CryptoSpec extends FlatSpec {
 
   "Crypto" should "import private keys" in {
-    // exported from the bitcoin client running in testnet mode
+    // exported from the litecoin client running in testnet mode
     val address = "mhW1BQDyhbTsnHEuB1n7yuj9V81TbeRfTY"
     val privateKey = "cRp4uUnreGMZN8vB7nQFX6XWMHU5Lc73HMAhmcDEwHfbgRS66Cqp"
 

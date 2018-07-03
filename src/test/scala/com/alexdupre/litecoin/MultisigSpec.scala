@@ -22,7 +22,7 @@ class MultisigSpec extends FunSuite with Matchers {
 
   test("create and sign multisig transactions") {
 
-    // tested with bitcoin core client using command: createmultisig 2 "[\"0394D30868076AB1EA7736ED3BDBEC99497A6AD30B25AFD709CDF3804CD389996A\",\"032C58BC9615A6FF24E9132CEF33F1EF373D97DC6DA7933755BC8BB86DBEE9F55C\",\"02C4D72D99CA5AD12C17C9CFE043DC4E777075E8835AF96F46D8E3CCD929FE1926\"]"
+    // tested with litecoin core client using command: createmultisig 2 "[\"0394D30868076AB1EA7736ED3BDBEC99497A6AD30B25AFD709CDF3804CD389996A\",\"032C58BC9615A6FF24E9132CEF33F1EF373D97DC6DA7933755BC8BB86DBEE9F55C\",\"02C4D72D99CA5AD12C17C9CFE043DC4E777075E8835AF96F46D8E3CCD929FE1926\"]"
     redeemScript should equal(BinaryData("52210394d30868076ab1ea7736ed3bdbec99497a6ad30b25afd709cdf3804cd389996a21032c58bc9615a6ff24e9132cef33f1ef373d97dc6da7933755bc8bb86dbee9f55c2102c4d72d99ca5ad12c17c9cfe043dc4e777075e8835af96f46d8e3ccd929fe192653ae"))
 
     // 196 = prefix for P2SH adress on testnet
@@ -37,7 +37,7 @@ class MultisigSpec extends FunSuite with Matchers {
 
     // and we want to sent the output to our multisig address
     val txOut = TxOut(
-      amount = 900000 satoshi, // 0.009 BTC) satoshi, meaning the fee will be 0.01-0.009 = 0.001
+      amount = 900000 satoshi, // 0.009 LTC) satoshi, meaning the fee will be 0.01-0.009 = 0.001
       publicKeyScript = Script.write(OP_HASH160 :: OP_PUSHDATA(multisigAddress) :: OP_EQUAL :: Nil))
 
     // create a tx with empty)put signature scripts
@@ -61,7 +61,7 @@ class MultisigSpec extends FunSuite with Matchers {
 
     val dest = "msCMyGGJ5eRcUgM5SQkwirVQGbGcr9oaYv"
     //priv: 92TgRLMLLdwJjT1JrrmTTWEpZ8uG7zpHEgSVPTbwfAs27RpdeWM
-    // 0.008 BTC) satoshi, meaning the fee will be 0.009-0.008 = 0.001
+    // 0.008 LTC) satoshi, meaning the fee will be 0.009-0.008 = 0.001
     val amount = 800000 satoshi
 
     // create a tx with empty)put signature scripts

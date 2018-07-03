@@ -248,25 +248,25 @@ object Crypto {
   def ripemd160 = hash(new RIPEMD160Digest) _
 
   /**
-    * 160 bits bitcoin hash, used mostly for address encoding
+    * 160 bits litecoin hash, used mostly for address encoding
     * hash160(input) = RIPEMD160(SHA256(input))
     *
     * @param input array of byte
-    * @return the 160 bits BTC hash of input
+    * @return the 160 bits LTC hash of input
     */
   def hash160(input: Seq[Byte]) = ripemd160(sha256(input))
 
   /**
-    * 256 bits bitcoin hash
+    * 256 bits litecoin hash
     * hash256(input) = SHA256(SHA256(input))
     *
     * @param input array of byte
-    * @return the 256 bits BTC hash of input
+    * @return the 256 bits LTC hash of input
     */
   def hash256(input: Seq[Byte]) = sha256(sha256(input))
 
   /**
-    * An ECDSA signature is a (r, s) pair. Bitcoin uses DER encoded signatures
+    * An ECDSA signature is a (r, s) pair. Litecoin uses DER encoded signatures
     *
     * @param r first value
     * @param s second value
@@ -408,7 +408,7 @@ object Crypto {
   }
 
   /**
-    * An ECDSA signature is a (r, s) pair. Bitcoin uses DER encoded signatures
+    * An ECDSA signature is a (r, s) pair. Litecoin uses DER encoded signatures
     *
     * @param blob sigbyte data
     * @return the decoded (r, s) signature
@@ -486,7 +486,7 @@ object Crypto {
     * Sign data with a private key, using RCF6979 deterministic signatures
     *
     * @param data       data to sign
-    * @param privateKey private key. If you are using bitcoin "compressed" private keys make sure to only use the first 32 bytes of
+    * @param privateKey private key. If you are using litecoin "compressed" private keys make sure to only use the first 32 bytes of
     *                   the key (there is an extra "1" appended to the key)
     * @return a (r, s) ECDSA signature pair
     */

@@ -78,7 +78,7 @@ object Base58 {
 
 /**
   * https://en.bitcoin.it/wiki/Base58Check_encoding
-  * Base58Check is a format based on Base58 and used a lot in bitcoin, for encoding addresses and private keys for
+  * Base58Check is a format based on Base58 and used a lot in litecoin, for encoding addresses and private keys for
   * example. It includes a prefix (usually a single byte) and a checksum so you know what has been encoded, and that it has
   * been transmitted correctly.
   * For example, to create an address for a public key you could write:

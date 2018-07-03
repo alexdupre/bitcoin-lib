@@ -164,10 +164,10 @@ object Protocol {
   implicit val networkAddressWithTimestampSer = NetworkAddressWithTimestamp
   implicit val inventoryVectorOutSer = InventoryVector
 
-  def readCollection[T](input: InputStream, maxElement: Option[Int], protocolVersion: Long)(implicit ser: BtcSerializer[T]): Seq[T] =
+  def readCollection[T](input: InputStream, maxElement: Option[Int], protocolVersion: Long)(implicit ser: LtcSerializer[T]): Seq[T] =
     readCollection(input, ser.read, maxElement, protocolVersion)
 
-  def readCollection[T](input: InputStream, protocolVersion: Long)(implicit ser: BtcSerializer[T]): Seq[T] =
+  def readCollection[T](input: InputStream, protocolVersion: Long)(implicit ser: LtcSerializer[T]): Seq[T] =
     readCollection(input, None, protocolVersion)(ser)
 
   def readCollection[T](input: InputStream, reader: (InputStream, Long) => T, maxElement: Option[Int], protocolVersion: Long): Seq[T] = {
@@ -182,7 +182,7 @@ object Protocol {
 
   def readCollection[T](input: InputStream, reader: (InputStream, Long) => T, protocolVersion: Long): Seq[T] = readCollection(input, reader, None, protocolVersion)
 
-  def writeCollection[T](seq: Seq[T], out: OutputStream, protocolVersion: Long)(implicit ser: BtcSerializer[T]): Unit = {
+  def writeCollection[T](seq: Seq[T], out: OutputStream, protocolVersion: Long)(implicit ser: LtcSerializer[T]): Unit = {
     writeVarint(seq.length, out)
     seq.foreach(t => ser.write(t, out, protocolVersion))
   }
@@ -195,7 +195,7 @@ object Protocol {
 
 import com.alexdupre.litecoin.Protocol._
 
-trait BtcSerializer[T] {
+trait LtcSerializer[T] {
   /**
     * write a message to a stream
     *
@@ -253,11 +253,11 @@ trait BtcSerializer[T] {
   def validate(t: T): Unit = {}
 }
 
-trait BtcSerializable[T] {
-  def serializer: BtcSerializer[T]
+trait LtcSerializable[T] {
+  def serializer: LtcSerializer[T]
 }
 
-object Message extends BtcSerializer[Message] {
+object Message extends LtcSerializer[Message] {
   val MagicMain = 0xD9B4BEF9L
   val MagicTestNet = 0xDAB5BFFAL
   val MagicTestnet4 = 0x0709110BL
@@ -292,19 +292,19 @@ object Message extends BtcSerializer[Message] {
 }
 
 /**
-  * Bitcoin message exchanged by nodes over the network
+  * Litecoin message exchanged by nodes over the network
   *
   * @param magic   Magic value indicating message origin network, and used to seek to next message when stream state is unknown
   * @param command ASCII string identifying the packet content, NULL padded (non-NULL padding results in packet rejected)
   * @param payload The actual data
   */
-case class Message(magic: Long, command: String, payload: BinaryData) extends BtcSerializable[Message] {
+case class Message(magic: Long, command: String, payload: BinaryData) extends LtcSerializable[Message] {
   require(command.length <= 12)
 
-  override def serializer: BtcSerializer[Message] = Message
+  override def serializer: LtcSerializer[Message] = Message
 }
 
-object NetworkAddressWithTimestamp extends BtcSerializer[NetworkAddressWithTimestamp] {
+object NetworkAddressWithTimestamp extends LtcSerializer[NetworkAddressWithTimestamp] {
   override def read(in: InputStream, protocolVersion: Long): NetworkAddressWithTimestamp = {
     val time = uint32(in)
     val services = uint64(in)
@@ -327,11 +327,11 @@ object NetworkAddressWithTimestamp extends BtcSerializer[NetworkAddressWithTimes
   }
 }
 
-case class NetworkAddressWithTimestamp(time: Long, services: Long, address: InetAddress, port: Long) extends BtcSerializable[NetworkAddressWithTimestamp] {
-  override def serializer: BtcSerializer[NetworkAddressWithTimestamp] = NetworkAddressWithTimestamp
+case class NetworkAddressWithTimestamp(time: Long, services: Long, address: InetAddress, port: Long) extends LtcSerializable[NetworkAddressWithTimestamp] {
+  override def serializer: LtcSerializer[NetworkAddressWithTimestamp] = NetworkAddressWithTimestamp
 }
 
-object NetworkAddress extends BtcSerializer[NetworkAddress] {
+object NetworkAddress extends LtcSerializer[NetworkAddress] {
   override def read(in: InputStream, protocolVersion: Long): NetworkAddress = {
     val services = uint64(in)
     val raw = new Array[Byte](16)
@@ -352,11 +352,11 @@ object NetworkAddress extends BtcSerializer[NetworkAddress] {
   }
 }
 
-case class NetworkAddress(services: Long, address: InetAddress, port: Long) extends BtcSerializable[NetworkAddress] {
-  override def serializer: BtcSerializer[NetworkAddress] = NetworkAddress
+case class NetworkAddress(services: Long, address: InetAddress, port: Long) extends LtcSerializable[NetworkAddress] {
+  override def serializer: LtcSerializer[NetworkAddress] = NetworkAddress
 }
 
-object Version extends BtcSerializer[Version] {
+object Version extends LtcSerializer[Version] {
   override def read(in: InputStream, protocolVersion: Long): Version = {
     val version = uint32(in)
     val services = uint64(in)
@@ -400,22 +400,22 @@ object Version extends BtcSerializer[Version] {
   * @param relay        Whether the remote peer should announce relayed transactions or not, see BIP 0037,
   *                     since version >= 70001
   */
-case class Version(version: Long, services: Long, timestamp: Long, addr_recv: NetworkAddress, addr_from: NetworkAddress, nonce: Long, user_agent: String, start_height: Long, relay: Boolean) extends BtcSerializable[Version] {
-  override def serializer: BtcSerializer[Version] = Version
+case class Version(version: Long, services: Long, timestamp: Long, addr_recv: NetworkAddress, addr_from: NetworkAddress, nonce: Long, user_agent: String, start_height: Long, relay: Boolean) extends LtcSerializable[Version] {
+  override def serializer: LtcSerializer[Version] = Version
 }
 
-object Addr extends BtcSerializer[Addr] {
+object Addr extends LtcSerializer[Addr] {
   override def write(t: Addr, out: OutputStream, protocolVersion: Long): Unit = writeCollection(t.addresses, out, protocolVersion)
 
   override def read(in: InputStream, protocolVersion: Long): Addr =
     Addr(readCollection[NetworkAddressWithTimestamp](in, Some(1000), protocolVersion))
 }
 
-case class Addr(addresses: Seq[NetworkAddressWithTimestamp]) extends BtcSerializable[Addr] {
-  override def serializer: BtcSerializer[Addr] = Addr
+case class Addr(addresses: Seq[NetworkAddressWithTimestamp]) extends LtcSerializable[Addr] {
+  override def serializer: LtcSerializer[Addr] = Addr
 }
 
-object InventoryVector extends BtcSerializer[InventoryVector] {
+object InventoryVector extends LtcSerializer[InventoryVector] {
   val ERROR = 0L
   val MSG_TX = 1L
   val MSG_BLOCK = 2L
@@ -428,23 +428,23 @@ object InventoryVector extends BtcSerializer[InventoryVector] {
   override def read(in: InputStream, protocolVersion: Long): InventoryVector = InventoryVector(uint32(in), hash(in))
 }
 
-case class InventoryVector(`type`: Long, hash: BinaryData) extends BtcSerializable[InventoryVector] {
+case class InventoryVector(`type`: Long, hash: BinaryData) extends LtcSerializable[InventoryVector] {
   require(hash.length == 32, "invalid hash length")
 
-  override def serializer: BtcSerializer[InventoryVector] = InventoryVector
+  override def serializer: LtcSerializer[InventoryVector] = InventoryVector
 }
 
-object Inventory extends BtcSerializer[Inventory] {
+object Inventory extends LtcSerializer[Inventory] {
   override def write(t: Inventory, out: OutputStream, protocolVersion: Long): Unit = writeCollection(t.inventory, out, protocolVersion)
 
   override def read(in: InputStream, protocolVersion: Long): Inventory = Inventory(readCollection[InventoryVector](in, Some(1000), protocolVersion))
 }
 
-case class Inventory(inventory: Seq[InventoryVector]) extends BtcSerializable[Inventory] {
-  override def serializer: BtcSerializer[Inventory] = Inventory
+case class Inventory(inventory: Seq[InventoryVector]) extends LtcSerializable[Inventory] {
+  override def serializer: LtcSerializer[Inventory] = Inventory
 }
 
-object Getheaders extends BtcSerializer[Getheaders] {
+object Getheaders extends LtcSerializer[Getheaders] {
   override def write(t: Getheaders, out: OutputStream, protocolVersion: Long): Unit = {
     writeUInt32(t.version.toInt, out)
     writeCollection(t.locatorHashes, (h: BinaryData, o: OutputStream, _: Long) => o.write(h), out, protocolVersion)
@@ -456,14 +456,14 @@ object Getheaders extends BtcSerializer[Getheaders] {
   }
 }
 
-case class Getheaders(version: Long, locatorHashes: Seq[BinaryData], stopHash: BinaryData) extends BtcSerializable[Getheaders] {
+case class Getheaders(version: Long, locatorHashes: Seq[BinaryData], stopHash: BinaryData) extends LtcSerializable[Getheaders] {
   locatorHashes.foreach(h => require(h.length == 32))
   require(stopHash.length == 32)
 
-  override def serializer: BtcSerializer[Getheaders] = Getheaders
+  override def serializer: LtcSerializer[Getheaders] = Getheaders
 }
 
-object Headers extends BtcSerializer[Headers] {
+object Headers extends LtcSerializer[Headers] {
   override def write(t: Headers, out: OutputStream, protocolVersion: Long): Unit = {
     writeCollection(t.headers, (t: BlockHeader, o: OutputStream, v: Long) => {
       BlockHeader.write(t, o, v)
@@ -481,11 +481,11 @@ object Headers extends BtcSerializer[Headers] {
   }
 }
 
-case class Headers(headers: Seq[BlockHeader]) extends BtcSerializable[Headers] {
-  override def serializer: BtcSerializer[Headers] = Headers
+case class Headers(headers: Seq[BlockHeader]) extends LtcSerializable[Headers] {
+  override def serializer: LtcSerializer[Headers] = Headers
 }
 
-object Getblocks extends BtcSerializer[Getblocks] {
+object Getblocks extends LtcSerializer[Getblocks] {
   override def write(t: Getblocks, out: OutputStream, protocolVersion: Long): Unit = {
     writeUInt32(t.version.toInt, out)
     writeCollection(t.locatorHashes, (h: BinaryData, o: OutputStream, _: Long) => o.write(h), out, protocolVersion)
@@ -497,24 +497,24 @@ object Getblocks extends BtcSerializer[Getblocks] {
   }
 }
 
-case class Getblocks(version: Long, locatorHashes: Seq[BinaryData], stopHash: BinaryData) extends BtcSerializable[Getblocks] {
+case class Getblocks(version: Long, locatorHashes: Seq[BinaryData], stopHash: BinaryData) extends LtcSerializable[Getblocks] {
   locatorHashes.foreach(h => require(h.length == 32))
   require(stopHash.length == 32)
 
-  override def serializer: BtcSerializer[Getblocks] = Getblocks
+  override def serializer: LtcSerializer[Getblocks] = Getblocks
 }
 
-object Getdata extends BtcSerializer[Getdata] {
+object Getdata extends LtcSerializer[Getdata] {
   override def write(t: Getdata, out: OutputStream, protocolVersion: Long): Unit = writeCollection(t.inventory, out, protocolVersion)
 
   override def read(in: InputStream, protocolVersion: Long): Getdata = Getdata(readCollection[InventoryVector](in, protocolVersion))
 }
 
-case class Getdata(inventory: Seq[InventoryVector]) extends BtcSerializable[Getdata] {
-  override def serializer: BtcSerializer[Getdata] = Getdata
+case class Getdata(inventory: Seq[InventoryVector]) extends LtcSerializable[Getdata] {
+  override def serializer: LtcSerializer[Getdata] = Getdata
 }
 
-object Reject extends BtcSerializer[Reject] {
+object Reject extends LtcSerializer[Reject] {
   override def write(t: Reject, out: OutputStream, protocolVersion: Long): Unit = {
     writeVarstring(t.message, out)
     writeUInt8(t.code.toInt, out)
@@ -526,6 +526,6 @@ object Reject extends BtcSerializer[Reject] {
   }
 }
 
-case class Reject(message: String, code: Long, reason: String, data: BinaryData) extends BtcSerializable[Reject] {
-  override def serializer: BtcSerializer[Reject] = Reject
+case class Reject(message: String, code: Long, reason: String, data: BinaryData) extends LtcSerializable[Reject] {
+  override def serializer: LtcSerializer[Reject] = Reject
 }

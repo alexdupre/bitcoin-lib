@@ -66,7 +66,7 @@ class TransactionSpec extends FlatSpec with Matchers {
 
   import TransactionSpec._
 
-  "Bitcoins library" should "pass reference tx valid tests" in {
+  "Litecoins library" should "pass reference tx valid tests" in {
     val stream = classOf[ScriptSpec].getResourceAsStream("/data/tx_valid.json")
     process(stream, true)
   }

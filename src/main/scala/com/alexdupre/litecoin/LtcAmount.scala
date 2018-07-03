@@ -1,8 +1,8 @@
 package com.alexdupre.litecoin
 
-sealed trait BtcAmount
+sealed trait LtcAmount
 
-case class Satoshi(amount: Long) extends BtcAmount {
+case class Satoshi(amount: Long) extends LtcAmount {
   // @formatter:off
     def toLong = amount
     def +(other: Satoshi) = Satoshi(amount + other.amount)
@@ -18,38 +18,38 @@ case class Satoshi(amount: Long) extends BtcAmount {
     // @formatter:on
 }
 
-case class MilliBtc(amount: BigDecimal) extends BtcAmount {
+case class Lite(amount: BigDecimal) extends LtcAmount {
   // @formatter:off
-    def +(other: MilliBtc) = MilliBtc(amount + other.amount)
-    def -(other: MilliBtc) = MilliBtc(amount - other.amount)
-    def *(m: Long) = MilliBtc(amount * m)
-    def /(d: Long) = MilliBtc(amount / d)
-    def compare(other: MilliBtc): Int = if (amount == other.amount) 0 else if (amount < other.amount) -1 else 1
-    def <= (that: MilliBtc): Boolean = compare(that) <= 0
-    def >= (that: MilliBtc): Boolean = compare(that) >= 0
-    def <  (that: MilliBtc): Boolean = compare(that) <  0
-    def >  (that: MilliBtc): Boolean = compare(that) > 0
-    def unary_-() = MilliBtc(-amount)
+    def +(other: Lite) = Lite(amount + other.amount)
+    def -(other: Lite) = Lite(amount - other.amount)
+    def *(m: Long) = Lite(amount * m)
+    def /(d: Long) = Lite(amount / d)
+    def compare(other: Lite): Int = if (amount == other.amount) 0 else if (amount < other.amount) -1 else 1
+    def <= (that: Lite): Boolean = compare(that) <= 0
+    def >= (that: Lite): Boolean = compare(that) >= 0
+    def <  (that: Lite): Boolean = compare(that) <  0
+    def >  (that: Lite): Boolean = compare(that) > 0
+    def unary_-() = Lite(-amount)
     // @formatter:on
 }
 
-case class Btc(amount: BigDecimal) extends BtcAmount {
-  require(amount.abs <= 21e6, "amount must not be greater than 21 millions")
+case class Ltc(amount: BigDecimal) extends LtcAmount {
+  require(amount.abs <= 84e6, "amount must not be greater than 84 millions")
   // @formatter:off
-    def +(other: Btc) = Btc(amount + other.amount)
-    def -(other: Btc) = Btc(amount - other.amount)
-    def *(m: Long) = Btc(amount * m)
-    def /(d: Long) = Btc(amount / d)
-    def compare(other: Btc): Int = if (amount == other.amount) 0 else if (amount < other.amount) -1 else 1
-    def <= (that: Btc): Boolean = compare(that) <= 0
-    def >= (that: Btc): Boolean = compare(that) >= 0
-    def <  (that: Btc): Boolean = compare(that) <  0
-    def >  (that: Btc): Boolean = compare(that) > 0
-    def unary_-() = Btc(-amount)
+    def +(other: Ltc) = Ltc(amount + other.amount)
+    def -(other: Ltc) = Ltc(amount - other.amount)
+    def *(m: Long) = Ltc(amount * m)
+    def /(d: Long) = Ltc(amount / d)
+    def compare(other: Ltc): Int = if (amount == other.amount) 0 else if (amount < other.amount) -1 else 1
+    def <= (that: Ltc): Boolean = compare(that) <= 0
+    def >= (that: Ltc): Boolean = compare(that) >= 0
+    def <  (that: Ltc): Boolean = compare(that) <  0
+    def >  (that: Ltc): Boolean = compare(that) > 0
+    def unary_-() = Ltc(-amount)
     // @formatter:on
 }
 
-case class MilliSatoshi(amount: Long) extends BtcAmount {
+case class MilliSatoshi(amount: Long) extends LtcAmount {
   // @formatter:off
     def toLong = amount
     def +(other: MilliSatoshi) = MilliSatoshi(amount + other.amount)

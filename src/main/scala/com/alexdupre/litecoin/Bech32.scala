@@ -103,7 +103,7 @@ object Bech32 {
   }
 
   /**
-    * encode a bitcoin witness address
+    * encode a litecoin witness address
     *
     * @param hrp            should be "ltc" or "tltc"
     * @param witnessVersion witness version (0 to 16, only 0 is currently defined)
@@ -118,7 +118,7 @@ object Bech32 {
   }
 
   /**
-    * decode a bitcoin witness address
+    * decode a litecoin witness address
     *
     * @param address witness address
     * @return a (prefix, version, program) tuple where prefix is the human-readble prefix, version

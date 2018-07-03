@@ -19,19 +19,19 @@ import scala.annotation.tailrec
   * @param hashes hashes in depth-first order (including standard varint size prefix)
   * @param flags flag bits, packed per 8 in a byte, least significant bit first (including standard varint size prefix)
   */
-case class MerkleBlock(version: Long, previousBlockHash: BinaryData, merkleRoot: BinaryData, timestamp: Long, bits: Long, nonce: Long, txCount: Int, hashes: Seq[BinaryData], flags: BinaryData) extends BtcSerializable[MerkleBlock] {
+case class MerkleBlock(version: Long, previousBlockHash: BinaryData, merkleRoot: BinaryData, timestamp: Long, bits: Long, nonce: Long, txCount: Int, hashes: Seq[BinaryData], flags: BinaryData) extends LtcSerializable[MerkleBlock] {
   require(previousBlockHash.length == 32, "length of preivous block hash should be 32")
   require(merkleRoot.length == 32, "length of merkle root hash should be 32")
   hashes.foreach(h => require(h.length == 32, "length of hash should be 32"))
   require(txCount > 1, "transaction count should be greater than 1")
 
-  override def serializer: BtcSerializer[MerkleBlock] = MerkleBlock
+  override def serializer: LtcSerializer[MerkleBlock] = MerkleBlock
 
   def computeRoot = MerkleBlock.computeRoot(txCount, topHeight(txCount), 0, hashes, toBits(flags), Nil)
 }
 
 
-object MerkleBlock extends BtcSerializer[MerkleBlock] {
+object MerkleBlock extends LtcSerializer[MerkleBlock] {
   override def read(input: InputStream, protocolVersion: Long): MerkleBlock = {
     val version = uint32(input)
     val previousBlockHash = hash(input)

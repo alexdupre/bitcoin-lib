@@ -16,12 +16,12 @@ class SighashSpec extends FunSuite {
     val publicKeys = privateKeys.map(_.publicKey)
 
     val previousTx = Seq(
-      Transaction(version = 2, txIn = Nil, txOut = TxOut(42 millibtc, Script.pay2pkh(publicKeys(0))) :: Nil, lockTime = 0),
-      Transaction(version = 2, txIn = Nil, txOut = TxOut(42 millibtc, Script.pay2pkh(publicKeys(1))) :: Nil, lockTime = 0)
+      Transaction(version = 2, txIn = Nil, txOut = TxOut(42 lite, Script.pay2pkh(publicKeys(0))) :: Nil, lockTime = 0),
+      Transaction(version = 2, txIn = Nil, txOut = TxOut(42 lite, Script.pay2pkh(publicKeys(1))) :: Nil, lockTime = 0)
     )
 
     // create a tx with no inputs
-    val tx = Transaction(version = 2, txIn = Nil, txOut = TxOut(80 millibtc, Script.pay2wsh(Script.createMultiSigMofN(2, publicKeys))) :: Nil, lockTime = 0L)
+    val tx = Transaction(version = 2, txIn = Nil, txOut = TxOut(80 lite, Script.pay2wsh(Script.createMultiSigMofN(2, publicKeys))) :: Nil, lockTime = 0L)
 
     // add an input
     val tx1 = {
@@ -41,7 +41,7 @@ class SighashSpec extends FunSuite {
     Transaction.correctlySpends(tx2, previousTx, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
 
     // but I cannot change the tx output
-    val tx3 = tx2.copy(txOut = tx2.txOut.updated(0, tx2.txOut(0).copy(amount = 40 millibtc)))
+    val tx3 = tx2.copy(txOut = tx2.txOut.updated(0, tx2.txOut(0).copy(amount = 40 lite)))
     intercept[RuntimeException] {
       Transaction.correctlySpends(tx3, previousTx, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
     }
@@ -56,12 +56,12 @@ class SighashSpec extends FunSuite {
     val publicKeys = privateKeys.map(_.publicKey)
 
     val previousTx = Seq(
-      Transaction(version = 2, txIn = Nil, txOut = TxOut(42 millibtc, Script.pay2wpkh(publicKeys(0))) :: Nil, lockTime = 0),
-      Transaction(version = 2, txIn = Nil, txOut = TxOut(42 millibtc, Script.pay2wpkh(publicKeys(1))) :: Nil, lockTime = 0)
+      Transaction(version = 2, txIn = Nil, txOut = TxOut(42 lite, Script.pay2wpkh(publicKeys(0))) :: Nil, lockTime = 0),
+      Transaction(version = 2, txIn = Nil, txOut = TxOut(42 lite, Script.pay2wpkh(publicKeys(1))) :: Nil, lockTime = 0)
     )
 
     // create a tx with no inputs
-    val tx = Transaction(version = 2, txIn = Nil, txOut = TxOut(80 millibtc, Script.pay2wsh(Script.createMultiSigMofN(2, publicKeys))) :: Nil, lockTime = 0L)
+    val tx = Transaction(version = 2, txIn = Nil, txOut = TxOut(80 lite, Script.pay2wsh(Script.createMultiSigMofN(2, publicKeys))) :: Nil, lockTime = 0L)
 
     // add an input
     val tx1 = {
@@ -80,7 +80,7 @@ class SighashSpec extends FunSuite {
     Transaction.correctlySpends(tx2, previousTx, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
 
     // but I cannot change the tx output
-    val tx3 = tx2.copy(txOut = tx2.txOut.updated(0, tx2.txOut(0).copy(amount = 40 millibtc)))
+    val tx3 = tx2.copy(txOut = tx2.txOut.updated(0, tx2.txOut(0).copy(amount = 40 lite)))
     intercept[RuntimeException] {
       Transaction.correctlySpends(tx3, previousTx, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
     }

@@ -8,7 +8,7 @@ import java.util
 import com.alexdupre.litecoin.Protocol._
 import org.spongycastle.crypto.generators.SCrypt
 
-object BlockHeader extends BtcSerializer[BlockHeader] {
+object BlockHeader extends LtcSerializer[BlockHeader] {
   override def read(input: InputStream, protocolVersion: Long): BlockHeader = {
     val version = uint32(input)
     val hashPreviousBlock = hash(input)
@@ -43,7 +43,7 @@ object BlockHeader extends BtcSerializer[BlockHeader] {
     *
     * @param bits difficulty target
     * @return the amount of work represented by this difficulty target, as displayed
-    *         by bitcoin core
+    *         by litecoin core
     */
   def blockProof(bits: Long): Double = {
     val (target, negative, overflow) = decodeCompact(bits)
@@ -78,7 +78,7 @@ object BlockHeader extends BtcSerializer[BlockHeader] {
   * @param bits              The calculated difficulty target being used for this block
   * @param nonce             The nonce used to generate this block… to allow variations of the header and compute different hashes
   */
-case class BlockHeader(version: Long, hashPreviousBlock: BinaryData, hashMerkleRoot: BinaryData, time: Long, bits: Long, nonce: Long) extends BtcSerializable[BlockHeader] {
+case class BlockHeader(version: Long, hashPreviousBlock: BinaryData, hashMerkleRoot: BinaryData, time: Long, bits: Long, nonce: Long) extends LtcSerializable[BlockHeader] {
   require(hashPreviousBlock.length == 32, "hashPreviousBlock must be 32 bytes")
   require(hashMerkleRoot.length == 32, "hashMerkleRoot must be 32 bytes")
 
@@ -94,10 +94,10 @@ case class BlockHeader(version: Long, hashPreviousBlock: BinaryData, hashMerkleR
 
   def blockProof = BlockHeader.blockProof(this)
 
-  override def serializer: BtcSerializer[BlockHeader] = BlockHeader
+  override def serializer: LtcSerializer[BlockHeader] = BlockHeader
 }
 
-object Block extends BtcSerializer[Block] {
+object Block extends LtcSerializer[Block] {
   override def read(input: InputStream, protocolVersion: Long): Block = {
     val raw = bytes(input, 80)
     val header = BlockHeader.read(raw)
@@ -127,7 +127,7 @@ object Block extends BtcSerializer[Block] {
       List(
         Transaction(version = 1,
           txIn = List(TxIn.coinbase(script)),
-          txOut = List(TxOut(amount = 50 btc, publicKeyScript = scriptPubKey)),
+          txOut = List(TxOut(amount = 50 ltc, publicKeyScript = scriptPubKey)),
           lockTime = 0))
     )
   }
@@ -188,18 +188,18 @@ object Block extends BtcSerializer[Block] {
 }
 
 /**
-  * Bitcoin block
+  * Litecoin block
   *
   * @param header block header
   * @param tx     transactions
   */
-case class Block(header: BlockHeader, tx: Seq[Transaction]) extends BtcSerializable[Block] {
+case class Block(header: BlockHeader, tx: Seq[Transaction]) extends LtcSerializable[Block] {
   lazy val hash = header.hash
 
   lazy val powHash = header.powHash
 
   lazy val blockId = header.blockId
 
-  override def serializer: BtcSerializer[Block] = Block
+  override def serializer: LtcSerializer[Block] = Block
 }
 

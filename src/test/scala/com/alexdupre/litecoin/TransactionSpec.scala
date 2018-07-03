@@ -110,7 +110,7 @@ class TransactionSpec extends FunSuite with Matchers {
     val computedHash = publicKey.hash160
     assert(providedHash == computedHash)
 
-    // step #5: now we replace the sigscript with sig + public key, and we get what would be sent to the btc network
+    // step #5: now we replace the sigscript with sig + public key, and we get what would be sent to the ltc network
     val tx2 = tx1.copy(txIn = List(
       TxIn(
         OutPoint(previousTx, 0),
@@ -227,7 +227,7 @@ class TransactionSpec extends FunSuite with Matchers {
       version = 1L,
       txIn = TxIn(OutPoint(previousTx.hash, 0), signatureScript = Nil, sequence = 0xFFFFFFFFL) :: Nil,
       txOut = TxOut(
-        amount = 900000 satoshi, // 0.009 BTC) satoshi, meaning the fee will be 0.01-0.009 = 0.001
+        amount = 900000 satoshi, // 0.009 LTC) satoshi, meaning the fee will be 0.01-0.009 = 0.001
         publicKeyScript = OP_HASH160 :: OP_PUSHDATA(multisigAddress) :: OP_EQUAL :: Nil) :: Nil,
       lockTime = 0L)
 
@@ -271,7 +271,7 @@ class TransactionSpec extends FunSuite with Matchers {
     //priv: 926iWgQDq5dN84BJ4q2fu4wjSSaVWFxwanE8EegzMh3vGCUBJ94
     val dest2 = "mk6kmMF5EEXksBkZxi7FniwwRgWuZuwDpo"
     //priv: 91r7coHBdzfgfm2p3ToJ3Bu6kcqL3BvSo5m4ENzMZzsimRKH8aq
-    // 0.03 and 0.07 BTC) satoshi, meaning the fee will be (0.01+0.002+0.09)-(0.03+0.07) = 0.002
+    // 0.03 and 0.07 LTC) satoshi, meaning the fee will be (0.01+0.002+0.09)-(0.03+0.07) = 0.002
     val amount1 = 3000000 satoshi
     val amount2 = 7000000 satoshi
 

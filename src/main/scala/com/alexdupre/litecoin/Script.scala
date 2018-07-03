@@ -413,7 +413,7 @@ object Script {
   }
 
   /**
-    * Bitcoin script runner
+    * Litecoin script runner
     *
     * @param context    script execution context
     * @param scriptFlag script flags
@@ -496,7 +496,7 @@ object Script {
 
 
     /**
-      * execute a bitcoin script
+      * execute a litecoin script
       *
       * @param script script
       * @param stack  initial stack
@@ -1030,28 +1030,28 @@ object Script {
 
   /**
     *
-    * @param script bitcoin script
+    * @param script litecoin script
     * @return a pay-to-script script
     */
   def pay2sh(script: Seq[ScriptElt]): Seq[ScriptElt] = pay2sh(Script.write(script))
 
   /**
     *
-    * @param script bitcoin script
+    * @param script litecoin script
     * @return a pay-to-script script
     */
   def pay2sh(script: BinaryData): Seq[ScriptElt] = OP_HASH160 :: OP_PUSHDATA(hash160(script)) :: OP_EQUAL :: Nil
 
   /**
     *
-    * @param script bitcoin script
+    * @param script litecoin script
     * @return a pay-to-witness-script script
     */
   def pay2wsh(script: Seq[ScriptElt]): Seq[ScriptElt] = pay2wsh(Script.write(script))
 
   /**
     *
-    * @param script bitcoin script
+    * @param script litecoin script
     * @return a pay-to-witness-script script
     */
   def pay2wsh(script: BinaryData): Seq[ScriptElt] = OP_0 :: OP_PUSHDATA(sha256(script)) :: Nil

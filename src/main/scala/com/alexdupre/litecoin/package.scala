@@ -58,37 +58,37 @@ package object litecoin {
     def millisatoshi = MilliSatoshi(n)
   }
 
-  implicit final class BtcDouble(private val n: Double) extends AnyVal {
-    def btc = Btc(n)
+  implicit final class LtcDouble(private val n: Double) extends AnyVal {
+    def ltc = Ltc(n)
   }
 
-  implicit final class MilliBtcDouble(private val n: Double) extends AnyVal {
-    def millibtc = MilliBtc(n)
+  implicit final class LiteDouble(private val n: Double) extends AnyVal {
+    def lite = Lite(n)
   }
 
-  implicit def satoshi2btc(input: Satoshi): Btc = Btc(BigDecimal(input.amount) / Coin)
+  implicit def satoshi2ltc(input: Satoshi): Ltc = Ltc(BigDecimal(input.amount) / Coin)
 
-  implicit def btc2satoshi(input: Btc): Satoshi = Satoshi((input.amount * Coin).toLong)
+  implicit def ltc2satoshi(input: Ltc): Satoshi = Satoshi((input.amount * Coin).toLong)
 
-  implicit def satoshi2millibtc(input: Satoshi): MilliBtc = btc2millibtc(satoshi2btc(input))
+  implicit def satoshi2lite(input: Satoshi): Lite = ltc2lite(satoshi2ltc(input))
 
-  implicit def millibtc2satoshi(input: MilliBtc): Satoshi = btc2satoshi(millibtc2btc(input))
+  implicit def lite2satoshi(input: Lite): Satoshi = ltc2satoshi(lite2ltc(input))
 
-  implicit def btc2millibtc(input: Btc): MilliBtc = MilliBtc(input.amount * 1000L)
+  implicit def ltc2lite(input: Ltc): Lite = Lite(input.amount * 1000L)
 
-  implicit def millibtc2btc(input: MilliBtc): Btc = Btc(input.amount / 1000L)
+  implicit def lite2ltc(input: Lite): Ltc = Ltc(input.amount / 1000L)
 
   implicit def satoshi2millisatoshi(input: Satoshi): MilliSatoshi = MilliSatoshi(input.amount * 1000L)
 
   implicit def millisatoshi2satoshi(input: MilliSatoshi): Satoshi = Satoshi(input.amount / 1000L)
 
-  implicit def btc2millisatoshi(input: Btc): MilliSatoshi = satoshi2millisatoshi(btc2satoshi(input))
+  implicit def ltc2millisatoshi(input: Ltc): MilliSatoshi = satoshi2millisatoshi(ltc2satoshi(input))
 
-  implicit def millisatoshi2btc(input: MilliSatoshi): Btc = satoshi2btc(millisatoshi2satoshi(input))
+  implicit def millisatoshi2ltc(input: MilliSatoshi): Ltc = satoshi2ltc(millisatoshi2satoshi(input))
 
-  implicit def millibtc2millisatoshi(input: MilliBtc): MilliSatoshi = satoshi2millisatoshi(millibtc2satoshi(input))
+  implicit def lite2millisatoshi(input: Lite): MilliSatoshi = satoshi2millisatoshi(lite2satoshi(input))
 
-  implicit def millisatoshi2millibtc(input: MilliSatoshi): MilliBtc = satoshi2millibtc(millisatoshi2satoshi(input))
+  implicit def millisatoshi2lite(input: MilliSatoshi): Lite = satoshi2lite(millisatoshi2satoshi(input))
 
   def toHexString(blob: BinaryData) = Hex.toHexString(blob)
 
@@ -144,7 +144,7 @@ package object litecoin {
     *
     * @param pub public key
     * @param chainHash chain hash (i.e. hash of the genesic block of the chain we're on)
-    * @return the p2swh-of-p2pkh address for this key). It is a Base58 address that is compatible with most bitcoin wallets
+    * @return the p2swh-of-p2pkh address for this key). It is a Base58 address that is compatible with most litecoin wallets
     */
   def computeP2ShOfP2WpkhAddress(pub: PublicKey, chainHash: BinaryData): String = {
     val script = Script.pay2wpkh(pub)
