@@ -38,9 +38,9 @@ class Bech32Spec extends FunSuite {
   }
 
   test("create addresses") {
-    assert(Bech32.encodeWitnessAddress("bc", 0, BinaryData("751e76e8199196d454941c45d1b3a323f1433bd6")) == "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4".toLowerCase)
-    assert(Bech32.encodeWitnessAddress("tb", 0, BinaryData("1863143c14c5166804bd19203356da136c985678cd4d27a1b8c6329604903262")) == "tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3q0sl5k7")
-    assert(Bech32.encodeWitnessAddress("tb", 0, BinaryData("000000c4a5cad46221b2a187905e5266362b99d5e91c6ce24d165dab93e86433")) == "tb1qqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesrxh6hy")
+    assert(Bech32.encodeWitnessAddress("ltc", 0, BinaryData("751e76e8199196d454941c45d1b3a323f1433bd6")) == "LTC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KGMN4N9".toLowerCase)
+    assert(Bech32.encodeWitnessAddress("tltc", 0, BinaryData("1863143c14c5166804bd19203356da136c985678cd4d27a1b8c6329604903262")) == "tltc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qsnr4fp")
+    assert(Bech32.encodeWitnessAddress("rltc", 0, BinaryData("000000c4a5cad46221b2a187905e5266362b99d5e91c6ce24d165dab93e86433")) == "rltc1qqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesxuhrdn")
   }
 
   test("reject invalid addresses") {

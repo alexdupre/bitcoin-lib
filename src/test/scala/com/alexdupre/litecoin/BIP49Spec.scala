@@ -7,7 +7,7 @@ import org.scalatest.FunSuite
 import org.scalatest.junit.JUnitRunner
 
 /**
-  * BIP 49 (Derivation scheme for P2WPKH-nested-in-P2SH based accounts) reference tests
+  * BIP 49 (Derivation scheme for P2WPKH-nested-in-P2SH based accounts) reference tests (changed for litecoin)
   * see https://github.com/bitcoin/bips/blob/master/bip-0049.mediawiki
   */
 @RunWith(classOf[JUnitRunner])
@@ -15,16 +15,16 @@ class BIP49Spec extends FunSuite {
   test("BIP49 reference tests") {
     val seed = MnemonicCode.toSeed("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about".split(" "), "")
     val master = DeterministicWallet.generate(seed)
-    assert(DeterministicWallet.encode(master, DeterministicWallet.tprv) == "tprv8ZgxMBicQKsPe5YMU9gHen4Ez3ApihUfykaqUorj9t6FDqy3nP6eoXiAo2ssvpAjoLroQxHqr3R5nE3a5dU3DHTjTgJDd7zrbniJr6nrCzd")
+    assert(DeterministicWallet.encode(master, DeterministicWallet.xprv) == "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu")
 
-    val accountKey = DeterministicWallet.derivePrivateKey(master, KeyPath("m/49'/1'/0'"))
-    assert(DeterministicWallet.encode(accountKey, DeterministicWallet.tprv) == "tprv8gRrNu65W2Msef2BdBSUgFdRTGzC8EwVXnV7UGS3faeXtuMVtGfEdidVeGbThs4ELEoayCAzZQ4uUji9DUiAs7erdVskqju7hrBcDvDsdbY")
+    val accountKey = DeterministicWallet.derivePrivateKey(master, KeyPath("m/49'/2'/0'"))
+    assert(DeterministicWallet.encode(accountKey, DeterministicWallet.Mtpv) == "Mtpv7RooeEQDUitupgpJcxZnfDwvq8hC24R7GAiscrqFhHHhit96vCNY7yudJgrM841dMbiRUQceC12566XAHHC8Rd1BtnBdokq9tmF7jLLvUdh")
 
     val key = DeterministicWallet.derivePrivateKey(accountKey, 0L :: 0L :: Nil)
-    assert(key.secretkeybytes == DeterministicWallet.derivePrivateKey(master, KeyPath("m/49'/1'/0'/0/0")).secretkeybytes)
-    assert(Base58Check.encode(Base58.Prefix.SecretKeyTestnet, key.privateKey.toBin) == "cULrpoZGXiuC19Uhvykx7NugygA3k86b3hmdCeyvHYQZSxojGyXJ")
-    assert(key.privateKey == PrivateKey(BinaryData("0xc9bdb49cfbaedca21c4b1f3a7803c34636b1d7dc55a717132443fc3f4c5867e801")))
-    assert(key.publicKey == PublicKey(BinaryData("0x03a1af804ac108a8a51782198c2d034b28bf90c8803f5a53f76276fa69a4eae77f")))
-    assert(computeBIP49Address(key.publicKey, Block.TestnetGenesisBlock.hash) == "2Mww8dCYPUpKHofjgcXcBCEGmniw9CoaiD2")
+    assert(key.secretkeybytes == DeterministicWallet.derivePrivateKey(master, KeyPath("m/49'/2'/0'/0/0")).secretkeybytes)
+    assert(Base58Check.encode(Base58.Prefix.SecretKey, key.privateKey.toBin) == "T8xSEcthDYN4rNUu4eTqtZTDSvphsjgBNbKawBeCkUqZLZ9MH8Ff")
+    assert(key.privateKey == PrivateKey(BinaryData("0xb02c7ab9f8827bc028780d5dfd6bab2a1f35d2b89f9b246829802ba5b83ba1c201")))
+    assert(key.publicKey == PublicKey(BinaryData("0x03f7a0a5d44504ea8a2494c7e32c895ba4968d3dab66a4d790380be8b0539f36bc")))
+    assert(computeBIP49Address(key.publicKey, Block.LivenetGenesisBlock.hash) == "M7wtsL7wSHDBJVMWWhtQfTMSYYkyooAAXM")
   }
 }

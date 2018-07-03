@@ -19,27 +19,25 @@ class DeriveWalletKeysSpec extends FunSuite {
   val master = DeterministicWallet.generate(seed)
 
   test("restore BIP44 wallet") {
-    val account = DeterministicWallet.derivePrivateKey(master, DeterministicWallet.KeyPath("m/44'/1'/0'"))
-    // some wallets will use tpub instead of upub
-    val xpub = DeterministicWallet.encode(DeterministicWallet.publicKey(account), DeterministicWallet.tpub)
-    assert(xpub == "tpubDDamug2qVwe94yFJ38MM3ek2LiWiyjMmkQPhYMnHNZz5XHj7bj8xc7pFmyiYnCfqrSy62e1196qcpmKYhcUMcBTGMW4mEWf1v9H8wNtLZku")
-    assert(deriveAddresses(xpub, Some(BIP44)) == Seq("mmpDgTP9FQbJCcdkkuXLbjbvqg3j33Zw3H", "mtXgQHM7Eawr6rjDWh7CrFtBQnbibviekL", "mw39H2JNixLuXLfTXqZr53M1n18ekPNi9U", "mnK3W3DMnkKMPT3Kbx6gvrmWxch6BhNHoo", "mpotVZLVr3fgbuBD2jzmwxVg7iATpq7YME"))
+    val account = DeterministicWallet.derivePrivateKey(master, DeterministicWallet.KeyPath("m/44'/2'/0'"))
+    val xpub = DeterministicWallet.encode(DeterministicWallet.publicKey(account), DeterministicWallet.Ltub)
+    assert(xpub == "Ltub2Yf9yF4GtmXFp876vKFjwCPsRRumEasKgHf7opGEEgCAdXqxMS9546VCWrDDdr9QgvwcqX94QubhQezgsKysPh5scrFr6FiZgT4C1NvZePm")
+    assert(deriveAddresses(xpub) == Seq("LVYyx7zGCRMWWRBqqRa9xKyktnJBfimsiZ", "Lf5S33wSwVqRU32XhJNxJP8XEk9ndrd173", "LPGYNS3D2vEoWrGTdD4HFVW1DUcBptXZca", "LYCcybttjrayMs8ty4Lg7YrYkttmcV2xxe", "LKUK3k98Tm7RSiWhd8AoUfdLmvhZZMbuaU"))
   }
 
   test("restore BIP49 wallet") {
-    val account = DeterministicWallet.derivePrivateKey(master, DeterministicWallet.KeyPath("m/49'/1'/0'"))
-    // some wallets will use tpub instead of upub
-    val xpub = DeterministicWallet.encode(DeterministicWallet.publicKey(account), DeterministicWallet.upub)
-    assert(xpub == "upub5DKk7kdrLoL3HqrfVdf3mLZJ59g6Bix8UtB6YJQNSKfE3E6YU2Vq7dH7E8ce87jUAac4nRag6Zd7c2cXs45Q4nJcLdrJyNWPxS5D9LFSpGL")
-    assert(deriveAddresses(xpub) == Seq("2NAV38YdZBS6s6b89QdmyPnjBxn6Jn3BkhQ", "2Mzxym6Rey5Mwnnxh6L134MaHFwTPQB4fdx", "2N8tTGMc57REfePZzPkWqEGaYKHsrVsW3LJ", "2Mxfuivcx4TdGroh6Q2GmCR5rQB46fjJUtn", "2N7uWEqMPCjzHynqSDaAnydZD6WfEpH9ekz"))
+    val account = DeterministicWallet.derivePrivateKey(master, DeterministicWallet.KeyPath("m/49'/2'/0'"))
+    val xpub = DeterministicWallet.encode(DeterministicWallet.publicKey(account), DeterministicWallet.Mtub)
+    assert(xpub == "Mtub2sWMFje8oFK5p3RtAYKaKPLnGQaz53LqB6AVeTTcq75ntD6VbPvNUZdM4y9WBeSRs4M5U4KuAo6826vTGgbfzqW5enKR1YhWkrsk1GTB1aE")
+    assert(deriveAddresses(xpub) == Seq("MD8VfaW8KAYVFwWoS58gfHmJnT7GaaSRrg", "MAqepo9XZSVCCqCRqzh3qHaNBNv1NSHkG6", "MSXDurSto2Yi1Vr2UmW4c5ZZ1NcSt9nuf9", "MKT27Wxtg8BnMDr3u6vP2zV1eZrcuTwFwK", "MGTcMSFFxLu2knEcFW7U8APqnjSJ6BF2iQ"))
   }
 
   test("restore BIP84 wallet") {
-    val account = DeterministicWallet.derivePrivateKey(master, DeterministicWallet.KeyPath("m/84'/1'/0'"))
-    // some wallets will use tpub instead of upub
-    val xpub = DeterministicWallet.encode(DeterministicWallet.publicKey(account), DeterministicWallet.vpub)
-    assert(xpub == "vpub5YmxxDXhaEfLoqxn8xJExGMSQepxRbJDFqyc9FpDKyW8z966eDsgqbTHnJCvc698MhN3FDRt49DuPBgdRufopecaeyffJCUKXRKHoNn7BhX")
-    assert(deriveAddresses(xpub) == Seq("tb1ql63el50rtln6n4kxa76jrhuts3kxmk9wtz6hp0", "tb1qa2hyhca4y07xqcl9r9m63rtv4hgdh063hldn6r", "tb1q0lywyl3cdkuw29yuh6w0frqh4hnxdj0m4e78eq", "tb1q4dg72vn06mrjh3yyzpkws3w2z0whrys8g2a997", "tb1qx4g3glhflr42clkkla9ty0vmfcmme9a426mrc2"))
+    val account = DeterministicWallet.derivePrivateKey(master, DeterministicWallet.KeyPath("m/84'/2'/0'"))
+    // litecoin xpub for BIP84 has not been defined
+    val xpub = DeterministicWallet.encode(DeterministicWallet.publicKey(account), DeterministicWallet.xpub)
+    assert(xpub == "xpub6CLVqhoT2EVCxNmYcBxrzUjqBy7169wovnSJ2s8t59dWuLZ2vGSHguCJ1g8M8c37kR8WK2sxc94bKzmEDxhneQBicKtjXrjNARgF3aZeBBc")
+    assert(deriveAddresses(xpub, Some(BIP84)) == Seq("ltc1qcxlsrf7vgpf02nfqcykstzu0hz8herc5w9f7dk", "ltc1qgnf5dqdte2ls58kaqsz078fuxs9j5alraqyfff", "ltc1qvuwmtqg4xwvlg9nq0wllv7msdpsk7jm8saxrrz", "ltc1qd9tv5x5v08v5m73x7ppmdn0vgke6qc700qcfmv", "ltc1qacgtwhww3t5h7wffkdk0vtwmp6r5gujzr976f6"))
   }
 }
 
@@ -54,14 +52,9 @@ object DeriveWalletKeysSpec {
     for (i <- 0L until 5L) yield {
       val pub = DeterministicWallet.derivePublicKey(master, 0L :: i :: Nil)
       val address = prefix match {
-        case DeterministicWallet.tpub if derivationScheme == Some(BIP44) => computeBIP44Address(pub.publicKey, Block.TestnetGenesisBlock.hash)
-        case DeterministicWallet.tpub if derivationScheme == Some(BIP49) => computeBIP49Address(pub.publicKey, Block.TestnetGenesisBlock.hash)
-        case DeterministicWallet.upub => computeBIP49Address(pub.publicKey, Block.TestnetGenesisBlock.hash)
-        case DeterministicWallet.vpub => computeBIP84Address(pub.publicKey, Block.TestnetGenesisBlock.hash)
-        case DeterministicWallet.xpub if derivationScheme == Some(BIP44) => computeBIP44Address(pub.publicKey, Block.LivenetGenesisBlock.hash)
-        case DeterministicWallet.xpub if derivationScheme == Some(BIP49) => computeBIP49Address(pub.publicKey, Block.LivenetGenesisBlock.hash)
-        case DeterministicWallet.ypub => computeBIP49Address(pub.publicKey, Block.LivenetGenesisBlock.hash)
-        case DeterministicWallet.zpub => computeBIP84Address(pub.publicKey, Block.LivenetGenesisBlock.hash)
+        case DeterministicWallet.Ltub => computeBIP44Address(pub.publicKey, Block.LivenetGenesisBlock.hash)
+        case DeterministicWallet.Mtub => computeBIP49Address(pub.publicKey, Block.LivenetGenesisBlock.hash)
+        case DeterministicWallet.xpub if derivationScheme == Some(BIP84) => computeBIP84Address(pub.publicKey, Block.LivenetGenesisBlock.hash)
       }
       address
     }

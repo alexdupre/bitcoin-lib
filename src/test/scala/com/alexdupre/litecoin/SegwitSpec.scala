@@ -200,7 +200,7 @@ class SegwitSpec extends FunSuite {
   }
 
   test("check block witness commitment (non-segwit block)") {
-    val stream = classOf[ProtocolSpec].getResourceAsStream("/block1.dat")
+    val stream = classOf[ProtocolSpec].getResourceAsStream("/block413567.raw")
     val block = Block.read(stream)
     val coinbase = block.tx.head
     assert(!Block.witnessReservedValue(coinbase).isDefined && !Block.witnessCommitment(coinbase).isDefined && Block.checkWitnessCommitment(block))

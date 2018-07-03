@@ -146,15 +146,15 @@ class DeterministicWalletSpec extends FlatSpec {
         val index = random.nextLong()
         val priv = DeterministicWallet.derivePrivateKey(master, index)
 
-        val encoded = DeterministicWallet.encode(priv, DeterministicWallet.tprv)
+        val encoded = DeterministicWallet.encode(priv, DeterministicWallet.ttpv)
         val (prefix, decoded) = DeterministicWallet.ExtendedPrivateKey.decode(encoded)
-        assert(prefix == DeterministicWallet.tprv)
+        assert(prefix == DeterministicWallet.ttpv)
         assert(decoded.chaincode == priv.chaincode && decoded.secretkeybytes == priv.secretkeybytes)
 
         val pub = DeterministicWallet.publicKey(priv)
-        val encoded1 = DeterministicWallet.encode(pub, DeterministicWallet.tpub)
+        val encoded1 = DeterministicWallet.encode(pub, DeterministicWallet.ttub)
         val (prefix1, decoded1) = DeterministicWallet.ExtendedPublicKey.decode(encoded1)
-        assert(prefix1 == DeterministicWallet.tpub)
+        assert(prefix1 == DeterministicWallet.ttub)
         assert(decoded1.chaincode == pub.chaincode && decoded1.publicKey == pub.publicKey)
       }
     }

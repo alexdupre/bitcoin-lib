@@ -5,28 +5,28 @@ import com.alexdupre.litecoin._
 object KeysFromXpub extends App {
   /**
     * this is how you would derive pubkeys and addresses from an xpub that someone gave you
-    * we currently support BIP49 (p2sh-of-p2wpkh) and BIP84 (p2wpkh)
+    * we currently support BIP22 (p2pkh) and BIP49 (p2sh-of-p2wpkh)
     *
     */
 
   def deriveAddresses(xpub: String) = {
     val (prefix, master) = DeterministicWallet.ExtendedPublicKey.decode(xpub)
     prefix match {
-      case DeterministicWallet.ypub =>
+      case DeterministicWallet.Ltub =>
         for (i <- 0L to 5L) {
           val pub = DeterministicWallet.derivePublicKey(master, 0L :: i :: Nil)
-          val address = computeBIP49Address(pub.publicKey, Block.TestnetGenesisBlock.hash)
+          val address = computeP2PkhAddress(pub.publicKey, Block.LivenetGenesisBlock.hash)
           println(s"$pub $address")
         }
-      case DeterministicWallet.vpub =>
+      case DeterministicWallet.Mtub =>
         for (i <- 0L to 5L) {
           val pub = DeterministicWallet.derivePublicKey(master, 0L :: i :: Nil)
-          val address = computeBIP84Address(pub.publicKey, Block.TestnetGenesisBlock.hash)
+          val address = computeP2ShOfP2WpkhAddress(pub.publicKey, Block.LivenetGenesisBlock.hash)
           println(s"$pub $address")
         }
     }
   }
 
-  deriveAddresses("ypub6XKCLnXy5uuK5w5mL6viWaRPKJ9EQ7bo2sL4NTJ1wp6WgQp5fCEGYV5KSfF5DLDdCgUZdHBHQmTx95wfCM5LnRHQhWocNybZDhMaiytoD8J")
-  deriveAddresses("vpub5V8AVGVJD4oTKnAEjjTXUg6pao1jpyooD7VwbrHdMPPcL5RvtPrdiWqtRBj5W9gbccoo8mZznYFY6QSL2CXP75eAPoRjgS6bZehQaWMoy5y")
+  deriveAddresses("Ltub2ZZJYd2XtS31eoYGHkGa5Q7w7J2UC6e514p3XfBSgySGP2JVjUsuBS1CHp1gzhgBJJ9VRDqnRyfc6r8GDwt8rvHTpQvMVhXv4EPdc8H4bBz")
+  deriveAddresses("Mtub2tn1XXJTsCHjpEiA2rh7YhMrQHcdEbTXTkZDMqHMFV6PDuXpmpAkhN1Yu1tuQgoVQV9YQfY1irr3P2gQkfnQPznb5WN1PHEs1dGJcZxQLfg")
 }

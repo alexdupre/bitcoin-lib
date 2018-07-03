@@ -83,9 +83,6 @@ object DeterministicWallet {
     Base58Check.encode(prefix, buffer)
   }
 
-  @deprecated("use encode(priv, prefix (xpriv or tpriv for example)) instead", "v0.9.17")
-  def encode(input: ExtendedPrivateKey, testnet: Boolean): String = encode(input, if (testnet) tprv else xprv)
-
   case class ExtendedPublicKey(publickeybytes: BinaryData, chaincode: BinaryData, depth: Int, path: KeyPath, parent: Long) {
     require(publickeybytes.length == 33)
     require(chaincode.length == 32)
@@ -116,9 +113,6 @@ object DeterministicWallet {
     val buffer = out.toByteArray
     Base58Check.encode(prefix, buffer)
   }
-
-  @deprecated("use encode(pub, prefix (xpub or tpub for example)) instead", "v0.9.17")
-  def encode(input: ExtendedPublicKey, testnet: Boolean): String = encode(input, if (testnet) tpub else xpub)
 
   /**
     *
@@ -216,28 +210,20 @@ object DeterministicWallet {
 
   def derivePublicKey(parent: ExtendedPublicKey, keyPath: KeyPath): ExtendedPublicKey = derivePublicKey(parent, keyPath.path)
 
-  // p2pkh mainnet
   val xprv = 0x0488ade4
   val xpub = 0x0488b21e
 
-  // p2sh-of-p2wpkh mainnet
-  val yprv = 0x049d7878
-  val ypub = 0x049d7cb2
+  // p2pkh mainnet
+  val Ltpv = 0x019d9cfe
+  val Ltub = 0x019da462
 
-  // p2wpkh mainnet
-  val zprv = 0x04b2430c
-  val zpub = 0x04b24746
+  // p2sh-of-p2wpkh mainnet
+  val Mtpv = 0x01b26792
+  val Mtub = 0x01b26ef6
 
   // p2pkh testnet
-  val tprv = 0x04358394
-  val tpub = 0x043587cf
+  val ttpv = 0x0436ef7d
+  val ttub = 0x0436f6e1
 
-  // p2sh-of-p2wpkh testnet
-  val uprv = 0x044a4e28
-  val upub = 0x044a5262
-
-  // p2wpkh testnet
-  val vprv = 0x045f18bc
-  val vpub = 0x045f1cf6
 }
 

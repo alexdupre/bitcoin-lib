@@ -33,7 +33,7 @@ class CryptoSpec extends FlatSpec {
     assert(publicKey.toBin === BinaryData("0450863ad64a87ae8a2fe83c1af1a8403cb53f53e486d8511dad8a04887e5b23522cd470243453a299fa9e77237716103abc11a1df38855ed6f2ee187e9c582ba6"))
 
     val address = Base58Check.encode(Prefix.PubkeyAddress, Crypto.hash160(publicKey.toBin))
-    assert(address === "16UwLL9Risc3QfPqBUvKofHmBQ7wMtjvM")
+    assert(address === "LKKSCYdyWP7fJDMZ1KUDbpj3yPmQ22MQrv")
   }
 
   it should "generate public keys from private keys 2" in {
@@ -42,7 +42,7 @@ class CryptoSpec extends FlatSpec {
     assert(publicKey.toBin === BinaryData("04D7E9DD0C618C65DC2E3972E2AA406CCD34E5E77895C96DC48AF0CB16A1D9B8CE0C0A3E2F4CD494FF54FBE4F5A95B410C0BF022EB2B6F23AE39F40DB79FAA6827"))
 
     val address = Base58Check.encode(Prefix.PubkeyAddress, Crypto.hash160(publicKey.toBin))
-    assert(address === "19FgFQGZy47NcGTJ4hfNdGMwS8EATqoa1X")
+    assert(address === "LTUdWcaQ3iMRs59TEqefuHRheLbSdSqoqT")
   }
 
   it should "sign and verify signatures" in {

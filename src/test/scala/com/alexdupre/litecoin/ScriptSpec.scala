@@ -25,8 +25,8 @@ class ScriptSpec extends FlatSpec {
     val blob = BaseEncoding.base16().lowerCase().decode("a914a90003b4ddef4be46fc61e7f2167da9d234944e287")
     val script = Script.parse(blob)
     val OP_HASH160 :: OP_PUSHDATA(scriptHash, _) :: OP_EQUAL :: Nil = script
-    val multisigAddress = Base58Check.encode(Prefix.ScriptAddressTestnet, scriptHash)
-    assert(multisigAddress === "2N8epCi6GwVDNYgJ7YtQ3qQ9vGQzaGu6JY4")
+    val multisigAddress = Base58Check.encode(Prefix.ScriptAddress2Testnet, scriptHash)
+    assert(multisigAddress === "Qc1aKixWxbGTgs4AAzS4v6bMQoSQBG4sCo")
   }
   it should "detect 'pay to script' scripts" in {
     val script = fromHexString("a91415727299b05b45fdaf9ac9ecf7565cfe27c3e56787")

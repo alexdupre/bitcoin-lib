@@ -11,7 +11,7 @@ import org.scalatest.junit.JUnitRunner
 @RunWith(classOf[JUnitRunner])
 class ProtocolSpec extends FlatSpec {
   "Protocol" should "parse blochain blocks" in {
-    val stream = classOf[ProtocolSpec].getResourceAsStream("/block1.dat")
+    val stream = classOf[ProtocolSpec].getResourceAsStream("/block413567.raw")
     val block = Block.read(stream)
     assert(Block.checkProofOfWork(block))
     // check that we can deserialize and re-serialize scripts
@@ -29,7 +29,7 @@ class ProtocolSpec extends FlatSpec {
     })
   }
   it should "serialize/deserialize blocks" in {
-    val stream = classOf[ProtocolSpec].getResourceAsStream("/block1.dat")
+    val stream = classOf[ProtocolSpec].getResourceAsStream("/block413567.raw")
     val bytes: BinaryData = ByteStreams.toByteArray(stream)
     val block = Block.read(bytes)
     val check = Block.write(block)
