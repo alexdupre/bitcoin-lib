@@ -105,7 +105,7 @@ object Bech32 {
   /**
     * encode a bitcoin witness address
     *
-    * @param hrp            should be "bc" or "tb"
+    * @param hrp            should be "ltc" or "tltc"
     * @param witnessVersion witness version (0 to 16, only 0 is currently defined)
     * @param data           witness program: if version is 0, either 20 bytes (P2WPKH) or 32 bytes (P2WSH)
     * @return a bech32 encoded witness address
@@ -128,7 +128,7 @@ object Bech32 {
   def decodeWitnessAddress(address: String): (String, Byte, BinaryData) = {
     if (address.indexWhere(_.isLower) != -1 && address.indexWhere(_.isUpper) != -1) throw new IllegalArgumentException("input mixes lowercase and uppercase characters")
     val (hrp, data) = decode(address)
-    require(hrp == "bc" || hrp == "tb" || hrp == "bcrt", s"invalid HRP $hrp")
+    require(hrp == "ltc" || hrp == "tltc" || hrp == "rltc", s"invalid HRP $hrp")
     val version = data(0)
     require(version >= 0 && version <= 16, "invalid segwit version")
     val bin = five2eight(data.drop(1))

@@ -168,9 +168,9 @@ package object litecoin {
   def computeP2WpkhAddress(pub: PublicKey, chainHash: BinaryData): String = {
     val hash = pub.hash160
     val hrp = chainHash match {
-      case Block.LivenetGenesisBlock.hash => "bc"
-      case Block.TestnetGenesisBlock.hash => "tb"
-      case Block.RegtestGenesisBlock.hash => "bcrt"
+      case Block.LivenetGenesisBlock.hash => "ltc"
+      case Block.TestnetGenesisBlock.hash => "tltc"
+      case Block.RegtestGenesisBlock.hash => "rltc"
       case _ => throw new IllegalArgumentException("Unknown chain hash: " + chainHash)
     }
     Bech32.encodeWitnessAddress(hrp, 0, hash)
