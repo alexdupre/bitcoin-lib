@@ -6,6 +6,7 @@ import java.nio.ByteOrder
 import java.util
 
 import com.alexdupre.litecoin.Protocol._
+import org.spongycastle.crypto.generators.SCrypt
 
 object BlockHeader extends BtcSerializer[BlockHeader] {
   override def read(input: InputStream, protocolVersion: Long): BlockHeader = {
@@ -62,7 +63,7 @@ object BlockHeader extends BtcSerializer[BlockHeader] {
     */
   def checkProofOfWork(header: BlockHeader): Boolean = {
     val (target, _, _) = decodeCompact(header.bits)
-    val hash = new BigInteger(1, header.blockId.toArray)
+    val hash = new BigInteger(1, header.powHash.toArray)
     hash.compareTo(target) <= 0
   }
 }
@@ -82,6 +83,11 @@ case class BlockHeader(version: Long, hashPreviousBlock: BinaryData, hashMerkleR
   require(hashMerkleRoot.length == 32, "hashMerkleRoot must be 32 bytes")
 
   lazy val hash: BinaryData = Crypto.hash256(BlockHeader.write(this))
+
+  lazy val powHash: BinaryData = {
+    val input = serializer.write(this)
+    SCrypt.generate(input, input, 1024, 1, 1, 32).reverse
+  }
 
   // hash is reversed here (same as tx id)
   lazy val blockId = BinaryData(hash.reverse)
@@ -189,6 +195,8 @@ object Block extends BtcSerializer[Block] {
   */
 case class Block(header: BlockHeader, tx: Seq[Transaction]) extends BtcSerializable[Block] {
   lazy val hash = header.hash
+
+  lazy val powHash = header.powHash
 
   lazy val blockId = header.blockId
 
