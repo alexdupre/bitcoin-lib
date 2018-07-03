@@ -19,14 +19,17 @@ import scala.annotation.tailrec
 object Base58 {
 
   object Prefix {
-    val PubkeyAddress = 0.toByte
+    val PubkeyAddress = 48.toByte
     val ScriptAddress = 5.toByte
-    val SecretKey = 128.toByte
+    val ScriptAddress2 = 50.toByte
+    val SecretKey = 176.toByte
     val PubkeyAddressTestnet = 111.toByte
     val ScriptAddressTestnet = 196.toByte
+    val ScriptAddress2Testnet = 58.toByte
     val SecretKeyTestnet = 239.toByte
     val PubkeyAddressSegnet = 30.toByte
     val ScriptAddressSegnet = 50.toByte
+    val ScriptAddress2Segnet = 58.toByte
     val SecretKeySegnet = 158.toByte
   }
 
