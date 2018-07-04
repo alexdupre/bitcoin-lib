@@ -413,19 +413,6 @@ object Transaction extends LtcSerializer[Transaction] {
     signInput(tx, inputIndex, Script.write(previousOutputScript), sighashType, amount, signatureVersion, privateKey)
 
   /**
-    *
-    * @param tx                   input transaction
-    * @param inputIndex           index of the tx input that is being processed
-    * @param previousOutputScript public key script of the output claimed by this tx input
-    * @param sighashType          signature hash type, which will be appended to the signature
-    * @param privateKey           private key
-    * @return the encoded signature of this tx for this specific tx input
-    */
-  @deprecated("", since = "0.9.6")
-  def signInput(tx: Transaction, inputIndex: Int, previousOutputScript: BinaryData, sighashType: Int, privateKey: PrivateKey): BinaryData =
-  signInput(tx, inputIndex, previousOutputScript, sighashType, amount = 0 satoshi, signatureVersion = SigVersion.SIGVERSION_BASE, privateKey)
-
-  /**
     * Sign a transaction. Cannot partially sign. All the input are signed with SIGHASH_ALL
     *
     * @param input    transaction to sign
