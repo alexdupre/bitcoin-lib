@@ -102,7 +102,7 @@ object Crypto {
     def apply(data: BinaryData, compressed: Boolean): PrivateKey = new PrivateKey(Scalar(data.take(32)), compressed)
 
     def fromBase58(value: String, prefix: Byte): PrivateKey = {
-      require(Set(Base58.Prefix.SecretKey, Base58.Prefix.SecretKeyTestnet, Base58.Prefix.SecretKeySegnet).contains(prefix), "invalid base 58 prefix for a private key")
+      require(Set(Base58.Prefix.SecretKey, Base58.Prefix.SecretKeyTestnet).contains(prefix), "invalid base 58 prefix for a private key")
       val (`prefix`, data) = Base58Check.decode(value)
       PrivateKey(data)
     }

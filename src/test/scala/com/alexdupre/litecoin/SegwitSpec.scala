@@ -67,27 +67,27 @@ class SegwitSpec extends FunSuite {
   }
 
   test("create p2wpkh tx") {
-    val priv1 = PrivateKey.fromBase58("QRY5zPUH6tWhQr2NwFXNpMbiLQq9u2ztcSZ6RwMPjyKv36rHP2xT", Base58.Prefix.SecretKeySegnet)
+    val priv1 = PrivateKey.fromBase58("cQWAJTf9HLiqLm6bjPViJTGAVc6zWvxmoE1ekjR4WjNZqut1yqrz", Base58.Prefix.SecretKeyTestnet)
     val pub1 = priv1.publicKey
-    val address1 = Base58Check.encode(Base58.Prefix.PubkeyAddressSegnet, Crypto.hash160(pub1.toBin))
+    val address1 = Base58Check.encode(Base58.Prefix.PubkeyAddressTestnet, Crypto.hash160(pub1.toBin))
 
-    assert(address1 == "D6YX7dpieYu8j1bV8B4RgksNmDk3sNJ4Ap")
+    assert(address1 == "mgvNsRy4AAS6y7tW7A3Exuv6k5cTVtAh4q")
 
-    // this is a standard tx that sends 0.4 LTC to D6YX7dpieYu8j1bV8B4RgksNmDk3sNJ4Ap
-    val tx1 = Transaction.read("010000000001014d5a1833ddd78613408d66b0189e3171aa3b5d1a5b2df4392749d39291ea73cd0000000000feffffff02005a6202000000001976a9140f66351d05269952302a607b4d6fb69517387a9788ac048b9800000000001976a914eb7c97a96fa9205b8a772d0c1d170e90a8a3098388ac02483045022100e2ccc1ab7e7e0c6bcbbdd4d9935448011b415fc1ec774416aa2760c3ae08431d022064ad6fd7c952df2b3f06a9cf94ddc9856c734c46ad43d0ab45d5ddf3b7deeef0012102edc343e7c422e94cca4c2a87a4f7ce54594c1b68682bbeefa130295e471ac019ae590000", pversion)
+    // this is a standard tx that sends 0.4 LTC to mgvNsRy4AAS6y7tW7A3Exuv6k5cTVtAh4q
+    val tx1 = Transaction.read("020000000195accd45da052bdfb4d4886ee871624b8c1657bf686026179a7eb02c4c09bccd000000006b483045022100dbf5e12e7d756d5bf740b1c21973b4ead0801901b8fad2696ffd24909e8ea268022003d4e82cc77204ce2709c4d65c66ff6119e63b450489a02fcd7d1fcad39e77e6012102a8702d9b460b15ac880607922fb34d0c790d8f8a7554798674841140ba3bb09bfeffffff0280f0fa02000000001976a914ce1d75f68aa8a10028cc331e699ced17023310fb88ac005a6202000000001976a9140f66351d05269952302a607b4d6fb69517387a9788ac36d60900", pversion)
 
     // now let's create a simple tx that spends tx1 and send 0.39 LTC to P2WPK output
     val tx2 = {
       val tmp = Transaction(version = 1,
-        txIn = TxIn(OutPoint(tx1.hash, 0), sequence = 0xffffffffL, signatureScript = Nil, witness = ScriptWitness.empty) :: Nil,
+        txIn = TxIn(OutPoint(tx1.hash, 1), sequence = 0xffffffffL, signatureScript = Nil, witness = ScriptWitness.empty) :: Nil,
         txOut = TxOut(0.39 ltc, Script.pay2wpkh(pub1)) :: Nil,
         lockTime = 0
       )
-      Transaction.sign(tmp, Seq(SignData(tx1.txOut(0).publicKeyScript, priv1)))
+      Transaction.sign(tmp, Seq(SignData(tx1.txOut(1).publicKeyScript, priv1)))
     }
     Transaction.correctlySpends(tx2, Seq(tx1), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
-    assert(tx2.txid == BinaryData("3acf933cd1dbffbb81bb5c6fab816fdebf85875a3b77754a28f00d717f450e1e"))
-    // this tx was published on segnet as 3acf933cd1dbffbb81bb5c6fab816fdebf85875a3b77754a28f00d717f450e1e
+    assert(tx2.txid == BinaryData("5e61b8897429c3014bb837c0bac1cc6782b0f7d5281127cef37c1dfad6d2d924"))
+    // this tx was published on testnet as 5e61b8897429c3014bb837c0bac1cc6782b0f7d5281127cef37c1dfad6d2d924
 
     // and now we create a segwit tx that spends the P2WPK output
     val tx3 = {
@@ -105,27 +105,27 @@ class SegwitSpec extends FunSuite {
     }
 
     Transaction.correctlySpends(tx3, Seq(tx2), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
-    assert(tx3.txid == BinaryData("a474219df20b95210b8dac45bb5ed49f0979f8d9b6c17420f3e50f6abc071af8"))
-    // this tx was published on segnet as a474219df20b95210b8dac45bb5ed49f0979f8d9b6c17420f3e50f6abc071af8
+    assert(tx3.txid == BinaryData("6af95097a6157ca1a90fadf4fe417144b5e86247f363990c3fed066ad71038f4"))
+    // this tx was published on testnet as 6af95097a6157ca1a90fadf4fe417144b5e86247f363990c3fed066ad71038f4
   }
 
   test("create p2wsh tx") {
-    val priv1 = PrivateKey.fromBase58("QRY5zPUH6tWhQr2NwFXNpMbiLQq9u2ztcSZ6RwMPjyKv36rHP2xT", Base58.Prefix.SecretKeySegnet)
+    val priv1 = PrivateKey.fromBase58("cQWAJTf9HLiqLm6bjPViJTGAVc6zWvxmoE1ekjR4WjNZqut1yqrz", Base58.Prefix.SecretKeyTestnet)
     val pub1 = priv1.publicKey
-    val address1 = Base58Check.encode(Base58.Prefix.PubkeyAddressSegnet, Crypto.hash160(pub1.toBin))
+    val address1 = Base58Check.encode(Base58.Prefix.PubkeyAddressTestnet, Crypto.hash160(pub1.toBin))
 
-    assert(address1 == "D6YX7dpieYu8j1bV8B4RgksNmDk3sNJ4Ap")
+    assert(address1 == "mgvNsRy4AAS6y7tW7A3Exuv6k5cTVtAh4q")
 
-    val priv2 = PrivateKey.fromBase58("QUpr3G5ia7K7txSq5k7QpgTfNy33iTQWb1nAUgb77xFesn89xsoJ", Base58.Prefix.SecretKeySegnet)
+    val priv2 = PrivateKey.fromBase58("cTnvMLGakZXFpsX3st5kJn87YAJtLMNPmoEioUemtiJJgbF6dpHj", Base58.Prefix.SecretKeyTestnet)
     val pub2 = priv2.publicKey
 
-    val priv3 = PrivateKey.fromBase58("QX3AN7b3WCAFaiCvAS2UD7HJZBsFU6r5shjfogJu55411hAF3BVx", Base58.Prefix.SecretKeySegnet)
+    val priv3 = PrivateKey.fromBase58("cW1EgBmugeNPWdH8xZzohCwkiP965zoy4VCE8UNZqq6epWKeaCu3", Base58.Prefix.SecretKeyTestnet)
     val pub3 = priv3.publicKey
 
-    // this is a standard tx that sends 0.5 LTC to D6YX7dpieYu8j1bV8B4RgksNmDk3sNJ4Ap
-    val tx1 = Transaction.read("010000000240b4f27534e9d5529e67e52619c7addc88eff64c8e7afc9b41afe9a01c6e2aea010000006b48304502210091aed7fe956c4b2471778bfef5a323a96fee21ec6d73a9b7f363beaad135c5f302207f63b0ffc08fd905cdb87b109416c2d6d8ec56ca25dd52529c931aa1154277f30121037cb5789f1ca6c640b6d423ef71390e0b002da81db8fad4466bf6c2fdfb79a24cfeffffff6e21b8c625d9955e48de0a6bbcd57b03624620a93536ddacabc19d024c330f04010000006a47304402203fb779df3ae2bf8404e6d89f83af3adee0d0a0c4ec5a01a1e88b3aa4313df6490220608177ca82cf4f7da9820a8e8bf4266ccece9eb004e73926e414296d0635d7c1012102edc343e7c422e94cca4c2a87a4f7ce54594c1b68682bbeefa130295e471ac019feffffff0280f0fa02000000001976a9140f66351d05269952302a607b4d6fb69517387a9788ace06d9800000000001976a91457572594090c298721e8dddcec3ac1ec593c6dcc88ac205a0000", pversion)
+    // this is a standard tx that sends 0.5 LTC to mgvNsRy4AAS6y7tW7A3Exuv6k5cTVtAh4q
+    val tx1 = Transaction.read("0200000001e48e3cb131584ce1bc157919e46f00351cb1508f07962cb8212aac8461e7c30c000000006b483045022100c89163c7d9b0639d16b6b06b45d58deb410734642e53dbf100fe871b9ce16c3c022024ade2c7191534ccdaa6e46cd449b7a0c34483e2a647af2095b82bc2fcb66057012102412975093984240a43f052b8e66ea8b1e403f3e5b1ae6667b9a236fa0d94547cfeffffff0280f0fa02000000001976a9140f66351d05269952302a607b4d6fb69517387a9788ac784137e1000000001976a91411ba40021db6657d9c6296305a21fc768d536f9188ac3ad60900", pversion)
 
-    // now let's create a simple tx that spends tx1 and send 0.5 LTC to a P2WSH output
+    // now let's create a simple tx that spends tx1 and send 0.49 LTC to a P2WSH output
     val tx2 = {
       // our script is a 2-of-2 multisig script
       val redeemScript = Script.createMultiSigMofN(2, Seq(pub2, pub3))
@@ -137,8 +137,8 @@ class SegwitSpec extends FunSuite {
       Transaction.sign(tmp, Seq(SignData(tx1.txOut(0).publicKeyScript, priv1)))
     }
     Transaction.correctlySpends(tx2, Seq(tx1), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
-    assert(tx2.txid == BinaryData("9d896b6d2b8fc9665da72f5b1942f924a37c5c714f31f40ee2a6c945f74dd355"))
-    // this tx was published on segnet as 9d896b6d2b8fc9665da72f5b1942f924a37c5c714f31f40ee2a6c945f74dd355
+    assert(tx2.txid == BinaryData("852e99626ab08c8275237c365e4f74db70bb649f1b6b03bc15dd7455f2f0f059"))
+    // this tx was published on testnet as 852e99626ab08c8275237c365e4f74db70bb649f1b6b03bc15dd7455f2f0f059
 
     // and now we create a segwit tx that spends the P2WSH output
     val tx3 = {
@@ -155,23 +155,23 @@ class SegwitSpec extends FunSuite {
     }
 
     Transaction.correctlySpends(tx3, Seq(tx2), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
-    assert(tx3.txid == BinaryData("943e07f0c66a9766d0cec81d65a03db4157bc0bfac4d36e400521b947be55aeb"))
-    // this tx was published on segnet as 943e07f0c66a9766d0cec81d65a03db4157bc0bfac4d36e400521b947be55aeb
+    assert(tx3.txid == BinaryData("03b9f14d03b3310dbc6da003aac6e1ac18558770979823b5fc3977821affa125"))
+    // this tx was published on testnet as 03b9f14d03b3310dbc6da003aac6e1ac18558770979823b5fc3977821affa125
   }
 
   test("create p2pkh embedded in p2sh") {
-    val priv1 = PrivateKey.fromBase58("QRY5zPUH6tWhQr2NwFXNpMbiLQq9u2ztcSZ6RwMPjyKv36rHP2xT", Base58.Prefix.SecretKeySegnet)
+    val priv1 = PrivateKey.fromBase58("cQWAJTf9HLiqLm6bjPViJTGAVc6zWvxmoE1ekjR4WjNZqut1yqrz", Base58.Prefix.SecretKeyTestnet)
     val pub1 = priv1.publicKey
 
     // p2wpkh script
     val script = Script.write(Script.pay2wpkh(pub1))
 
     // which we embeed into a standard p2sh script
-    val p2shaddress = Base58Check.encode(Base58.Prefix.ScriptAddressSegnet, Crypto.hash160(script))
-    assert(p2shaddress === "MDbNMghDbaaizHz8pSgMqu9qJXvKwouqkM")
+    val p2shaddress = Base58Check.encode(Base58.Prefix.ScriptAddress2Testnet, Crypto.hash160(script))
+    assert(p2shaddress === "QSJCEZ5XH2HjXm6q1oLuiuL8LZysdne6xe")
 
     // this tx send 0.5 ltc to our p2shaddress
-    val tx = Transaction.read("010000000175dd435bf25e5d77567272f7d6eefcf37b7156b78bb233490140d6fa7545cfca010000006a47304402206e601a482b301141cb3a1712c18729fa1f1731fce5c4205ac9d344af38bb24bf022003fe70edcbd1a5b3957b3c939e583739eadb8de8d3d2cc2ad2903b19c991cb80012102ba2558223d7cd5df2d8decc4506a62ccaa96159f685360335c280952b25e7adefeffffff02692184df000000001976a9148b3ee15d631122010d31e1774aa318ca9ca8b67088ac80f0fa020000000017a9143e73638f202bb880a28e8df1946adc3058227d11878c730000", pversion)
+    val tx = Transaction.read("020000000153512bd8673158d1039ed640c907f00b70c82bfef4291c0c1f78ed02bc75685f010000006b483045022100d254fc0154d06d305e8653a932cb3a6f933f75e45b420bacc4d59d0a9f4e577d022054fb3cef7b280d0dffd75672a34b0b216f348494422805a9fd43ced2dfb386c00121034d1701328d5d2aaa8d0fd3209b695eb55b0e4ad96d5ea780f2a2e9eb956a3161feffffff025d845d9d000000001976a9146692e8f801c04912300d739d2e55517220ca2d8f88ac80f0fa020000000017a9143e73638f202bb880a28e8df1946adc3058227d11873ed60900", pversion)
 
     // let's spend it:
 
@@ -188,8 +188,8 @@ class SegwitSpec extends FunSuite {
     }
 
     Transaction.correctlySpends(tx1, Seq(tx), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
-    assert(tx1.txid === BinaryData("98f5668176b0c1b14653f96f71987fd325c3d46b9efb677ab0606ea5555791d5"))
-    // this tx was published on segnet as 98f5668176b0c1b14653f96f71987fd325c3d46b9efb677ab0606ea5555791d5
+    assert(tx1.txid === BinaryData("4b74ab021f51c7af226aebfa10d8b84e2bb4252ea7db93a32b181b50cdd1bd79"))
+    // this tx was published on testnet as 4b74ab021f51c7af226aebfa10d8b84e2bb4252ea7db93a32b181b50cdd1bd79
   }
 
   test("check block witness commitment (segwit block)") {

@@ -258,11 +258,9 @@ trait LtcSerializable[T] {
 }
 
 object Message extends LtcSerializer[Message] {
-  val MagicMain = 0xD9B4BEF9L
-  val MagicTestNet = 0xDAB5BFFAL
-  val MagicTestnet4 = 0x0709110BL
-  val MagicNamecoin = 0xFEB4BEF9L
-  val MagicSegnet = 0xC4A1ABDC
+  val MagicMain = 0xDBB6C0FBL
+  val MagicTestnet4 = 0xF1C8D2FDL
+  val MagicRegTest = 0xDAB5BFFAL
 
   override def read(in: InputStream, protocolVersion: Long): Message = {
     val magic = uint32(in)

@@ -210,8 +210,13 @@ object DeterministicWallet {
 
   def derivePublicKey(parent: ExtendedPublicKey, keyPath: KeyPath): ExtendedPublicKey = derivePublicKey(parent, keyPath.path)
 
+  // mainnet
   val xprv = 0x0488ade4
   val xpub = 0x0488b21e
+
+  // testnet
+  val tprv = 0x04358394
+  val tpub = 0x043587cf
 
   // p2pkh mainnet
   val Ltpv = 0x019d9cfe
