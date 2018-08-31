@@ -11,7 +11,7 @@ This is a simple scala library which implements most of the bitcoin cash protoco
 * base58 encoding/decoding
 * block headers, block and tx parsing
 * tx creation, signature and verification
-* script parsing and execution (including OP codes added on the May 15 2018 fork)
+* script parsing and execution (including OP codes added on the May 15 2018 fork and OP_CHECKDATASIG)
 * pay to public key tx
 * pay to script tx / multisig tx
 * BIP 32 (deterministic wallets)
@@ -35,7 +35,7 @@ Our goal is not to re-implement a full Bitcoin Cash node but to build a library 
 * releases and milestones are pushed to maven central
 
 ```scala
-libraryDependencies += "com.alexdupre" %% "bitcoincash-lib" % "0.9.18"
+libraryDependencies += "com.alexdupre" %% "bitcoincash-lib" % "0.9.19"
 ```
 
 The latest released version is 0.9.18
