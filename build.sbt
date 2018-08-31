@@ -2,7 +2,7 @@ organization := "com.alexdupre"
 
 name := "bitcoincash-lib"
 
-version := "0.9.19-SNAPSHOT"
+version := "0.9.20-SNAPSHOT"
 
 crossScalaVersions := Seq("2.11.12", "2.12.6")
 
