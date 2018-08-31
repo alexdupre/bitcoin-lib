@@ -88,9 +88,9 @@ object ScriptFlags {
   //
   val SCRIPT_ENABLE_REPLAY_PROTECTION = (1 << 17)
 
-  // Enable new opcodes.
+  // Is OP_CHECKDATASIG and variant are enabled.
   //
-  val SCRIPT_ENABLE_MONOLITH_OPCODES = (1 << 18)
+  val SCRIPT_ENABLE_CHECKDATASIG = (1 << 18)
 
 
   /**
@@ -112,17 +112,20 @@ object ScriptFlags {
     */
   val STANDARD_SCRIPT_VERIFY_FLAGS = MANDATORY_SCRIPT_VERIFY_FLAGS |
     SCRIPT_VERIFY_DERSIG |
-    SCRIPT_VERIFY_MINIMALDATA |
+    SCRIPT_VERIFY_LOW_S |
     SCRIPT_VERIFY_NULLDUMMY |
+    SCRIPT_VERIFY_SIGPUSHONLY |
+    SCRIPT_VERIFY_MINIMALDATA |
     SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS |
     SCRIPT_VERIFY_CLEANSTACK |
-    SCRIPT_VERIFY_NULLFAIL |
     SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY |
     SCRIPT_VERIFY_CHECKSEQUENCEVERIFY |
-    SCRIPT_VERIFY_LOW_S
+    SCRIPT_VERIFY_NULLFAIL
 
   /** For convenience, standard but not mandatory verify flags. */
   val STANDARD_NOT_MANDATORY_VERIFY_FLAGS = STANDARD_SCRIPT_VERIFY_FLAGS & ~MANDATORY_SCRIPT_VERIFY_FLAGS
+
+  val STANDARD_CHECKDATASIG_VERIFY_FLAGS = STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_CHECKDATASIG
 }
 
 object Script {
@@ -194,7 +197,6 @@ object Script {
 
   def isDisabled(op: ScriptElt, scriptFlag: Int) = op match {
     case OP_INVERT | OP_2MUL | OP_2DIV | OP_MUL | OP_LSHIFT | OP_RSHIFT => true
-    case OP_CAT | OP_SPLIT | OP_AND | OP_OR | OP_XOR | OP_NUM2BIN | OP_BIN2NUM | OP_DIV | OP_MOD if (scriptFlag & SCRIPT_ENABLE_MONOLITH_OPCODES) == 0 => true
     case _ => false
   }
 
@@ -203,6 +205,68 @@ object Script {
     case OP_PUSHDATA(_, _) => 0
     case OP_RESERVED => 0
     case _ => 1
+  }
+
+  def isMinimallyEncoded(input: Seq[Byte], maximumSize: Int = 4): Boolean = {
+    if (input.length > maximumSize) return false
+
+    if (input.nonEmpty) {
+      // Check that the number is encoded with the minimum possible
+      // number of bytes.
+      //
+      // If the most-significant-byte - excluding the sign bit - is zero
+      // then we're not minimal. Note how this test also rejects the
+      // negative-zero encoding, 0x80.
+      if ((input.last & 0x7f) == 0) {
+        // One exception: if there's more than one byte and the most
+        // significant bit of the second-most-significant-byte is set
+        // it would conflict with the sign bit. An example of this case
+        // is +-255, which encode to 0xff00 and 0xff80 respectively.
+        // (big-endian).
+        if (input.size <= 1 || (input(input.size - 2) & 0x80) == 0) return false
+      }
+    }
+
+    return true
+  }
+
+  def minimallyEncode(input: Seq[Byte]): Seq[Byte] = {
+    val data = input.toArray
+
+    if (data.isEmpty) return data
+
+    // If the last byte is not 0x00 or 0x80, we are minimally encoded.
+    val last = data.last
+    if ((last & 0x7f) != 0) return data
+
+    // If the script is one byte long, then we have a zero, which encodes as an
+    if (data.size == 1) return Seq.empty[Byte]
+
+    // If the next byte has it sign bit set, then we are minimaly encoded.
+    if ((data(data.size - 2) & 0x80) != 0) return data
+
+    // We are not minimally encoded, we need to figure out how much to trim.
+    var i = data.size - 1
+    while (i > 0) {
+      // We found a non zero byte, time to encode.
+      if (data(i - 1) != 0) {
+        if ((data(i - 1) & 0x80) != 0) {
+          // We found a byte with it sign bit set so we need one more
+          // byte.
+          data(i) = last
+          i += 1
+        } else {
+          // the sign bit is clear, we can use it.
+          data(i - 1) = (data(i - 1) | last).toByte
+        }
+
+        return data.take(i)
+      }
+      i -= 1
+    }
+
+    // If we the whole thing is zeros, then we have a zero.
+    return Seq.empty[Byte]
   }
 
   def encodeNumber(value: Long): BinaryData = {
@@ -243,23 +307,8 @@ object Script {
     if (input.isEmpty) 0
     else if (input.length > maximumSize) throw new RuntimeException(s"number cannot be encoded on more than $maximumSize bytes")
     else {
-      if (checkMinimalEncoding) {
-        // Check that the number is encoded with the minimum possible
-        // number of bytes.
-        //
-        // If the most-significant-byte - excluding the sign bit - is zero
-        // then we're not minimal. Note how this test also rejects the
-        // negative-zero encoding, 0x80.
-        if ((input.last & 0x7f) == 0) {
-          // One exception: if there's more than one byte and the most
-          // significant bit of the second-most-significant-byte is set
-          // it would conflict with the sign bit. An example of this case
-          // is +-255, which encode to 0xff00 and 0xff80 respectively.
-          // (big-endian).
-          if (input.size <= 1 || (input(input.size - 2) & 0x80) == 0) {
-            throw new RuntimeException("non-minimally encoded script number")
-          }
-        }
+      if (checkMinimalEncoding && !isMinimallyEncoded(input, maximumSize)) {
+        throw new RuntimeException("non-minimally encoded script number")
       }
       var result = 0L
       for (i <- input.indices) {
@@ -379,6 +428,37 @@ object Script {
     true
   }
 
+  def getSigOpCount(script: Seq[ScriptElt], scriptFlag: Int, accurate: Boolean): Int = {
+    script.foldLeft[(Int, Option[ScriptElt])]((0, None)) {
+      case ((n, prevOpcode), opcode) =>
+        val inc = opcode match {
+          case OP_CHECKSIG | OP_CHECKSIGVERIFY => 1
+          case OP_CHECKDATASIG | OP_CHECKDATASIGVERIFY => if ((scriptFlag & SCRIPT_ENABLE_CHECKDATASIG) != 0) 1 else 0
+          case OP_CHECKMULTISIG | OP_CHECKMULTISIGVERIFY => if (accurate) prevOpcode match {
+            case Some(OP_1) => 1
+            case Some(OP_2) => 2
+            case Some(OP_3) => 3
+            case Some(OP_4) => 4
+            case Some(OP_5) => 5
+            case Some(OP_6) => 6
+            case Some(OP_7) => 7
+            case Some(OP_8) => 8
+            case Some(OP_9) => 9
+            case Some(OP_10) => 10
+            case Some(OP_11) => 11
+            case Some(OP_12) => 12
+            case Some(OP_13) => 13
+            case Some(OP_14) => 14
+            case Some(OP_15) => 15
+            case Some(OP_16) => 16
+            case _ => MaxPubkeysPerMultisig
+          } else MaxPubkeysPerMultisig
+          case _ => 0
+        }
+        (n + inc, Some(opcode))
+    }._1
+  }
+
   /**
     * Execution context of a tx script. A script is always executed in the "context" of a transaction that is being
     * verified.
@@ -418,7 +498,7 @@ object Script {
 
     def checkSignature(pubKey: Seq[Byte], sigBytes: Seq[Byte], scriptCode: Seq[Byte]): Boolean = {
       if (sigBytes.isEmpty) false
-      else if (!Crypto.checkSignatureEncoding(sigBytes, scriptFlag)) throw new RuntimeException("invalid signature")
+      else if (!Crypto.checkTransactionSignatureEncoding(sigBytes, scriptFlag)) throw new RuntimeException("invalid signature")
       else if (!Crypto.checkPubKeyEncoding(pubKey, scriptFlag)) throw new RuntimeException("invalid public key")
       else if (!Crypto.isPubKeyValid(pubKey)) false // see how this is different from above ?
       else {
@@ -437,7 +517,7 @@ object Script {
     def checkSignatures(pubKeys: Seq[Seq[Byte]], sigs: Seq[Seq[Byte]], scriptCode: Seq[Byte]): Boolean = sigs match {
       case Nil => true
       case _ if sigs.length > pubKeys.length => false
-      case sig :: _ if !Crypto.checkSignatureEncoding(sig, scriptFlag) => throw new RuntimeException("invalid signature")
+      case sig :: _ if !Crypto.checkTransactionSignatureEncoding(sig, scriptFlag) => throw new RuntimeException("invalid signature")
       case sig :: _ =>
         if (checkSignature(pubKeys.head, sig, scriptCode))
           checkSignatures(pubKeys.tail, sigs.tail, scriptCode)
@@ -538,7 +618,7 @@ object Script {
         case OP_1SUB :: _ if stack.isEmpty => throw new RuntimeException("cannot run OP_1SUB on am empty stack")
         case OP_1SUB :: tail => run(tail, encodeNumber(decodeNumber(stack.head) - 1) :: stack.tail, state.copy(opCount = opCount + 1))
         case OP_ABS :: _ if stack.isEmpty => throw new RuntimeException("cannot run OP_ABS on am empty stack")
-        case OP_ABS :: tail => run(tail, encodeNumber(Math.abs(decodeNumber(stack.head))) :: stack.tail, state.copy(opCount = opCount + 1))
+        case OP_ABS :: tail => run(tail, encodeNumber(decodeNumber(stack.head).abs) :: stack.tail, state.copy(opCount = opCount + 1))
         case OP_ADD :: tail => stack match {
           case a :: b :: stacktail =>
             val x = decodeNumber(a)
@@ -556,7 +636,8 @@ object Script {
         }
         case OP_BIN2NUM :: _ if stack.isEmpty => throw new RuntimeException("cannot run OP_BIN2NUM on am empty stack")
         case OP_BIN2NUM :: tail =>
-          val n = encodeNumber(Script.decodeNumber(stack.head, false, Int.MaxValue)).data
+          val n = minimallyEncode(stack.head)
+          require (isMinimallyEncoded(n), "Given operand is not a number within the valid range [-2^31...2^31]")
           run(tail, n :: stack.tail, state.copy(opCount = opCount + 1))
         case OP_BOOLAND :: tail => stack match {
           case x1 :: x2 :: stacktail =>
@@ -645,6 +726,19 @@ object Script {
           case _ => throw new RuntimeException("Cannot perform OP_CHECKSIG on a stack with less than 2 elements")
         }
         case OP_CHECKSIGVERIFY :: tail => run(OP_CHECKSIG :: OP_VERIFY :: tail, stack, state.copy(opCount = opCount - 1))
+        case OP_CHECKDATASIG :: _ if ((scriptFlag & SCRIPT_ENABLE_CHECKDATASIG) == 0) => throw new RuntimeException("OP_CHECKDATASIG: disabled")
+        case OP_CHECKDATASIG :: tail => stack match {
+          case pubKey :: message :: sig :: stacktail =>
+            if (!Crypto.checkDataSignatureEncoding(sig, scriptFlag)) throw new RuntimeException("invalid signature")
+            if (!Crypto.checkPubKeyEncoding(pubKey, scriptFlag)) throw new RuntimeException("invalid public key")
+            val hash = Crypto.sha256(message)
+            val success = verifySignature(hash, sig, PublicKey(pubKey))
+            if (!success && (scriptFlag & SCRIPT_VERIFY_NULLFAIL) != 0 && sig.nonEmpty)
+              throw new RuntimeException("Signature must be zero for failed OP_CHECKDATASIG operation")
+            run(tail, (if (success) True else False) :: stacktail, state.copy(opCount = opCount + 1))
+          case _ => throw new RuntimeException("Cannot perform OP_CHECKDATASIG on a stack with less than 3 elements")
+        }
+        case OP_CHECKDATASIGVERIFY :: tail => run(OP_CHECKDATASIG :: OP_VERIFY :: tail, stack, state.copy(opCount = opCount - 1))
         case OP_CHECKMULTISIG :: tail => {
           // pop public keys
           val m = decodeNumber(stack.head).toInt
@@ -778,8 +872,8 @@ object Script {
         case OP_NUM2BIN :: tail => stack match {
           case x1 :: x2 :: stacktail =>
             val size = decodeNumber(x1)
-            if (size > MaxScriptElementSize) throw new RuntimeException("number of bytes requested it too big")
-            val rawnum = encodeNumber(Script.decodeNumber(x2, false, Int.MaxValue)).data
+            if (size > MaxScriptElementSize) throw new RuntimeException("Push value size limit exceeded")
+            val rawnum = minimallyEncode(x2)
             if (rawnum.size > size) throw new RuntimeException("unable to fit the number in the number of byte requested")
             val result = if (rawnum.size == size) rawnum
             else if (rawnum.isEmpty) (1 to size.toInt).map(_ => 0.toByte)

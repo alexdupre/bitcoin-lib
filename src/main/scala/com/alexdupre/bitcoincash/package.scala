@@ -13,9 +13,13 @@ package object bitcoincash {
   val Cent = 1000000L
   val MaxMoney = 21000000 * Coin
   val MaxScriptElementSize = 520
+  val MaxPubkeysPerMultisig = 20
 
   val ONE_MEGABYTE = 1000000
   val MAX_TX_SIZE = ONE_MEGABYTE
+  val MAX_COINBASE_SCRIPTSIG_SIZE = 100
+
+  val MAX_TX_SIGOPS_COUNT = 20000
 
   /**
     * signature hash flags

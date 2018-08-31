@@ -66,11 +66,11 @@ class TransactionMalleabilitySpec extends FlatSpec {
       lockTime = 0)
 
     assert(tx1.txid != tx2.txid)
-    Transaction.correctlySpends(tx2, Seq(prevTx), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
+    Transaction.correctlySpends(tx2, Seq(prevTx), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS & ~ScriptFlags.SCRIPT_VERIFY_SIGPUSHONLY)
 
     // but it would fail if we enforce the "sig script should only push data" rule
     intercept[RuntimeException] {
-      Transaction.correctlySpends(tx2, Seq(prevTx), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS | ScriptFlags.SCRIPT_VERIFY_SIGPUSHONLY)
+      Transaction.correctlySpends(tx2, Seq(prevTx), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
     }
   }
 }

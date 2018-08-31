@@ -14,6 +14,7 @@ import org.spongycastle.crypto.params.{ECDomainParameters, ECPrivateKeyParameter
 import org.spongycastle.crypto.signers.{ECDSASigner, HMacDSAKCalculator}
 import org.spongycastle.math.ec.ECPoint
 
+import scala.util.Try
 
 object Crypto {
   val params = SECNamedCurves.getByName("secp256k1")
@@ -285,7 +286,7 @@ object Crypto {
   def encodeSignature(t: (BigInteger, BigInteger)): BinaryData = encodeSignature(t._1, t._2)
 
   def isDERSignature(sig: Seq[Byte]): Boolean = {
-    // Format: 0x30 [total-length] 0x02 [R-length] [R] 0x02 [S-length] [S] [sighash]
+    // Format: 0x30 [total-length] 0x02 [R-length] [R] 0x02 [S-length] [S]
     // * total-length: 1-byte length descriptor of everything that follows,
     //   excluding the sighash byte.
     // * R-length: 1-byte length descriptor of the R value that follows.
@@ -294,34 +295,22 @@ object Crypto {
     //   the start, except a single one when the next byte has its highest bit set).
     // * S-length: 1-byte length descriptor of the S value that follows.
     // * S: arbitrary-length big-endian encoded S value. The same rules apply.
-    // * sighash: 1-byte value indicating what data is hashed (not part of the DER
-    //   signature)
 
     // Minimum and maximum size constraints.
-    if (sig.size < 9) return false
-    if (sig.size > 73) return false
+    if (sig.size < 8) return false
+    if (sig.size > 72) return false
 
     // A signature is of type 0x30 (compound).
     if (sig(0) != 0x30.toByte) return false
 
     // Make sure the length covers the entire signature.
-    if (sig(1) != sig.size - 3) return false
+    if (sig(1) != sig.size - 2) return false
+
+    // Check whether the R element is an integer.
+    if (sig(2) != 0x02.toByte) return false
 
     // Extract the length of the R element.
     val lenR = sig(3)
-
-    // Make sure the length of the S element is still inside the signature.
-    if (5 + lenR >= sig.size) return false
-
-    // Extract the length of the S element.
-    val lenS = sig(5 + lenR)
-
-    // Verify that the length of the signature matches the sum of the length
-    // of the elements.
-    if (lenR + lenS + 7 != sig.size) return false
-
-    // Check whether the R element is an integer.
-    if (sig(2) != 0x02) return false
 
     // Zero-length integers are not allowed for R.
     if (lenR == 0) return false
@@ -329,22 +318,49 @@ object Crypto {
     // Negative numbers are not allowed for R.
     if ((sig(4) & 0x80.toByte) != 0) return false
 
+    // Make sure the length of the R element is consistent with the signature
+    // size.
+    // Remove:
+    // * 1 byte for the coumpound type.
+    // * 1 byte for the length of the signature.
+    // * 2 bytes for the integer type of R and S.
+    // * 2 bytes for the size of R and S.
+    // * 1 byte for S itself.
+    if (lenR > sig.size - 7) return false
+
     // Null bytes at the start of R are not allowed, unless R would
     // otherwise be interpreted as a negative number.
     if (lenR > 1 && (sig(4) == 0x00) && (sig(5) & 0x80) == 0) return false
 
+    // S's definition starts after R's definition:
+    // * 1 byte for the coumpound type.
+    // * 1 byte for the length of the signature.
+    // * 1 byte for the size of R.
+    // * lenR bytes for R itself.
+    // * 1 byte to get to S.
+    val startS = lenR + 4
+
     // Check whether the S element is an integer.
-    if (sig(lenR + 4) != 0x02.toByte) return false
+    if (sig(startS) != 0x02.toByte) return false
+
+    // Extract the length of the S element.
+    val lenS = sig(startS + 1)
 
     // Zero-length integers are not allowed for S.
     if (lenS == 0) return false
 
     // Negative numbers are not allowed for S.
-    if ((sig(lenR + 6) & 0x80) != 0) return false
+    if ((sig(startS + 2) & 0x80) != 0) return false
+
+    // Verify that the length of S is consistent with the size of the signature
+    // including metadatas:
+    // * 1 byte for the integer type of S.
+    // * 1 byte for the size of S.
+    if (startS + lenS + 2 != sig.size) return false
 
     // Null bytes at the start of S are not allowed, unless S would otherwise be
     // interpreted as a negative number.
-    if (lenS > 1 && (sig(lenR + 6) == 0x00) && (sig(lenR + 7) & 0x80) == 0) return false
+    if (lenS > 1 && (sig(startS + 2) == 0x00) && (sig(startS + 3) & 0x80) == 0) return false
 
     return true
   }
@@ -364,13 +380,17 @@ object Crypto {
     encodeSignature(normalizeSignature(r, s))
   }
 
-  def checkSignatureEncoding(sig: Seq[Byte], flags: Int): Boolean = {
+  def checkDataSignatureEncoding(sig: Seq[Byte], flags: Int): Boolean = {
+    if (sig.isEmpty) true
+    else checkRawSignatureEncoding(sig, flags)
+  }
+
+  def checkTransactionSignatureEncoding(sig: Seq[Byte], flags: Int): Boolean = {
     import ScriptFlags._
     // Empty signature. Not strictly DER encoded, but allowed to provide a
     // compact way to provide an invalid signature for use with CHECK(MULTI)SIG
     if (sig.isEmpty) true
-    else if ((flags & (SCRIPT_VERIFY_DERSIG | SCRIPT_VERIFY_LOW_S | SCRIPT_VERIFY_STRICTENC)) != 0 && !isDERSignature(sig)) false
-    else if ((flags & SCRIPT_VERIFY_LOW_S) != 0 && !isLowDERSignature(sig)) false
+    else if (!checkRawSignatureEncoding(sig.dropRight(1), flags)) false
     else if ((flags & SCRIPT_VERIFY_STRICTENC) != 0) {
       if (!isDefinedHashtypeSignature(sig)) false
       else {
@@ -381,6 +401,13 @@ object Crypto {
         else true
       }
     }
+    else true
+  }
+
+  def checkRawSignatureEncoding(sig: Seq[Byte], flags: Int): Boolean = {
+    import ScriptFlags._
+    if ((flags & (SCRIPT_VERIFY_DERSIG | SCRIPT_VERIFY_LOW_S | SCRIPT_VERIFY_STRICTENC)) != 0 && !isDERSignature(sig)) false
+    else if ((flags & SCRIPT_VERIFY_LOW_S) != 0 && !isLowDERSignature(sig)) false
     else true
   }
 
@@ -472,7 +499,7 @@ object Crypto {
       val signature1 = normalizeSignature(signature)
       val native = NativeSecp256k1.verify(data, signature1, publicKey.toBin)
       native
-    } else {
+    } else Try {
       val (r, s) = decodeSignature(signature)
       require(r.compareTo(one) >= 0, "r must be >= 1")
       require(r.compareTo(curve.getN) < 0, "r must be < N")
@@ -483,7 +510,7 @@ object Crypto {
       val params = new ECPublicKeyParameters(publicKey.value, curve)
       signer.init(false, params)
       signer.verifySignature(data.toArray, r, s)
-    }
+    }.toOption.getOrElse(false)
   }
 
   /**

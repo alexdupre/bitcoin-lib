@@ -66,7 +66,7 @@ object ScriptSpec {
     "COMPRESSED_PUBKEYTYPE" -> SCRIPT_VERIFY_COMPRESSED_PUBKEYTYPE,
     "SIGHASH_FORKID" -> SCRIPT_ENABLE_SIGHASH_FORKID,
     "REPLAY_PROTECTION" -> SCRIPT_ENABLE_REPLAY_PROTECTION,
-    "MONOLITH_OPCODES" -> SCRIPT_ENABLE_MONOLITH_OPCODES
+    "CHECKDATASIG" -> SCRIPT_ENABLE_CHECKDATASIG
   )
 
   def parseScriptFlags(strFlags: String): Int = if (strFlags.isEmpty) 0 else strFlags.split(",").map(mapFlagNames(_)).foldLeft(0)(_ | _)

@@ -113,6 +113,10 @@ case object OP_NOP7 extends ScriptElt
 case object OP_NOP8 extends ScriptElt
 case object OP_NOP9 extends ScriptElt
 case object OP_NOP10 extends ScriptElt
+case object OP_CHECKDATASIG extends ScriptElt
+case object OP_CHECKDATASIGVERIFY extends ScriptElt
+case object OP_PREFIX_BEGIN extends ScriptElt
+case object OP_PREFIX_END extends ScriptElt
 case object OP_SMALLINTEGER extends ScriptElt
 case object OP_INVALIDOPCODE extends ScriptElt
 object OP_PUSHDATA {
@@ -250,6 +254,10 @@ object ScriptElt {
     0xb7 -> OP_NOP8,
     0xb8 -> OP_NOP9,
     0xb9 -> OP_NOP10,
+    0xba -> OP_CHECKDATASIG,
+    0xbb -> OP_CHECKDATASIGVERIFY,
+    0xf0 -> OP_PREFIX_BEGIN,
+    0xf7 -> OP_PREFIX_END,
     0xfa -> OP_SMALLINTEGER,
     0xff -> OP_INVALIDOPCODE)
 

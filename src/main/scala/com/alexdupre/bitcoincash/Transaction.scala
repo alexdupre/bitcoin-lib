@@ -153,11 +153,15 @@ object Transaction extends BtcSerializer[Transaction] {
     require(input.txOut.map(_.amount.amount).sum <= MaxMoney, "sum of outputs amount is invalid")
     input.txIn.foreach(TxIn.validate)
     input.txOut.foreach(TxOut.validate)
+    val sigOpCountWithoutP2SH = (input.txIn.map(_.signatureScript) ++ input.txOut.map(_.publicKeyScript)).foldLeft(0) {
+      case (n, script) => Script.getSigOpCount(Script.parse(script), ScriptFlags.STANDARD_CHECKDATASIG_VERIFY_FLAGS, false)
+    }
+    require(sigOpCountWithoutP2SH <= MAX_TX_SIGOPS_COUNT, "number of signature operations is invalid")
     val outPoints = input.txIn.map(_.outPoint)
     require(outPoints.size == outPoints.toSet.size, "duplicate inputs")
     if (Transaction.isCoinbase(input)) {
       require(input.txIn(0).signatureScript.size >= 2, "coinbase script size")
-      require(input.txIn(0).signatureScript.size <= 100, "coinbase script size")
+      require(input.txIn(0).signatureScript.size <= MAX_COINBASE_SCRIPTSIG_SIZE, "coinbase script size")
     } else {
       require(input.txIn.forall(in => !OutPoint.isCoinbase(in.outPoint)), "prevout is null")
     }
