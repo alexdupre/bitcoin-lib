@@ -494,12 +494,11 @@ object Crypto {
     * @param publicKey public key
     * @return true is signature is valid for this data with this public key
     */
-  def verifySignature(data: BinaryData, signature: BinaryData, publicKey: PublicKey): Boolean = {
+  def verifySignature(data: BinaryData, signature: BinaryData, publicKey: PublicKey): Boolean = Try {
     if (Secp256k1Context.isEnabled) {
       val signature1 = normalizeSignature(signature)
-      val native = NativeSecp256k1.verify(data, signature1, publicKey.toBin)
-      native
-    } else Try {
+      NativeSecp256k1.verify(data, signature1, publicKey.toBin)
+    } else {
       val (r, s) = decodeSignature(signature)
       require(r.compareTo(one) >= 0, "r must be >= 1")
       require(r.compareTo(curve.getN) < 0, "r must be < N")
@@ -510,8 +509,8 @@ object Crypto {
       val params = new ECPublicKeyParameters(publicKey.value, curve)
       signer.init(false, params)
       signer.verifySignature(data.toArray, r, s)
-    }.toOption.getOrElse(false)
-  }
+    }
+  }.toOption.getOrElse(false)
 
   /**
     *
