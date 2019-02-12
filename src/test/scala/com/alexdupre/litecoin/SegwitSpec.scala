@@ -1,14 +1,8 @@
 package com.alexdupre.litecoin
 
-import java.nio.ByteOrder
-
-import com.alexdupre.litecoin
 import com.alexdupre.litecoin.Crypto.PrivateKey
-import org.junit.runner.RunWith
 import org.scalatest.FunSuite
-import org.scalatest.junit.JUnitRunner
 
-@RunWith(classOf[JUnitRunner])
 class SegwitSpec extends FunSuite {
   val pversion = Protocol.PROTOCOL_VERSION
 

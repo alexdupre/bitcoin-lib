@@ -3,11 +3,8 @@ package com.alexdupre.litecoin
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import com.alexdupre.litecoin.Protocol._
-import org.junit.runner.RunWith
 import org.scalatest.FlatSpec
-import org.scalatest.junit.JUnitRunner
 
-@RunWith(classOf[JUnitRunner])
 class ToolsSpec extends FlatSpec {
   "Tools" should "read/write uint8" in {
     Seq(0, 15, 155, 0xee, 0xff).map(value => {

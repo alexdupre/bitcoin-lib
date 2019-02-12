@@ -1,10 +1,7 @@
 package com.alexdupre.litecoin
 
-import org.junit.runner.RunWith
 import org.scalatest.FlatSpec
-import org.scalatest.junit.JUnitRunner
 
-@RunWith(classOf[JUnitRunner])
 class PuzzleSpec extends FlatSpec {
 
   "bitcoin-lib" should "handle puzzle a59012de71dafa1510fd57d339ff488d50da4808c9fd4c001d6de8874d8aa26d" in {

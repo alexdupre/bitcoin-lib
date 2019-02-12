@@ -2,15 +2,12 @@ package com.alexdupre.litecoin
 
 import com.alexdupre.litecoin.Crypto.{PrivateKey, PublicKey}
 import com.alexdupre.litecoin.DeterministicWallet.KeyPath
-import org.junit.runner.RunWith
 import org.scalatest.FunSuite
-import org.scalatest.junit.JUnitRunner
 
 /**
   * BIP 49 (Derivation scheme for P2WPKH-nested-in-P2SH based accounts) reference tests (changed for litecoin)
   * see https://github.com/bitcoin/bips/blob/master/bip-0049.mediawiki
   */
-@RunWith(classOf[JUnitRunner])
 class BIP49Spec extends FunSuite {
   test("BIP49 reference tests") {
     val seed = MnemonicCode.toSeed("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about".split(" "), "")

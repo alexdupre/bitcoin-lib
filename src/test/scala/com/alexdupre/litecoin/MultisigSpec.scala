@@ -2,11 +2,8 @@ package com.alexdupre.litecoin
 
 import com.alexdupre.litecoin.Base58.Prefix
 import com.alexdupre.litecoin.Crypto.PrivateKey
-import org.junit.runner.RunWith
-import org.scalatest.junit.JUnitRunner
 import org.scalatest.{FlatSpec, FunSuite, Matchers}
 
-@RunWith(classOf[JUnitRunner])
 class MultisigSpec extends FunSuite with Matchers {
   val key1 = PrivateKey(BinaryData("C0B91A94A26DC9BE07374C2280E43B1DE54BE568B2509EF3CE1ADE5C9CF9E8AA01"))
   val pub1 = key1.publicKey

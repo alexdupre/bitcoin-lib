@@ -1,11 +1,8 @@
 package com.alexdupre.litecoin
 
 import com.alexdupre.litecoin.Crypto.PrivateKey
-import org.junit.runner.RunWith
 import org.scalatest.FlatSpec
-import org.scalatest.junit.JUnitRunner
 
-@RunWith(classOf[JUnitRunner])
 class TransactionMalleabilitySpec extends FlatSpec {
   "Transaction" should "not be malleable" in {
     // tx we want to spend

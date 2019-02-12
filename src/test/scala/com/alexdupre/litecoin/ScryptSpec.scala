@@ -1,10 +1,7 @@
 package com.alexdupre.litecoin
 
-import org.junit.runner.RunWith
 import org.scalatest.FlatSpec
-import org.scalatest.junit.JUnitRunner
 
-@RunWith(classOf[JUnitRunner])
 class ScryptSpec extends FlatSpec {
 
   "BlockHeader" should "generate the expected Scrypt hash with known inputs" in {
