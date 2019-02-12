@@ -1,15 +1,12 @@
 package com.alexdupre.bitcoincash
 
-import org.junit.runner.RunWith
 import org.scalatest.FunSuite
-import org.scalatest.junit.JUnitRunner
 
 /**
   * check that we can restore BIP44 wallets and generate valid xpubs and addresses.
   * please note that this test only shows how to derive account keys and addresses. Change keys and addresses can
   * use the same scheme will a different derivation path.
   */
-@RunWith(classOf[JUnitRunner])
 class DeriveWalletKeysSpec extends FunSuite {
   import DeriveWalletKeysSpec._
 

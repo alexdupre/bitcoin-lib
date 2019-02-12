@@ -4,14 +4,11 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, 
 
 import com.alexdupre.bitcoincash.Base58.Prefix
 import com.alexdupre.bitcoincash.Crypto._
-import org.junit.runner.RunWith
 import org.scalatest.FlatSpec
-import org.scalatest.junit.JUnitRunner
 
 import scala.io.Source
 import scala.util.Random
 
-@RunWith(classOf[JUnitRunner])
 class CryptoSpec extends FlatSpec {
 
   "Crypto" should "import private keys" in {

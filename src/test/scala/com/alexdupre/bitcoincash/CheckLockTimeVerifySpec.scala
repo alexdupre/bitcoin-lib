@@ -1,11 +1,8 @@
 package com.alexdupre.bitcoincash
 
 import com.alexdupre.bitcoincash.Crypto.PrivateKey
-import org.junit.runner.RunWith
 import org.scalatest.FlatSpec
-import org.scalatest.junit.JUnitRunner
 
-@RunWith(classOf[JUnitRunner])
 class CheckLockTimeVerifySpec extends FlatSpec {
   "Bip65" should "let you initiate payment channels" in {
 

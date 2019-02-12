@@ -1,10 +1,7 @@
 package com.alexdupre.bitcoincash
 
-import org.junit.runner.RunWith
 import org.scalatest.FunSuite
-import org.scalatest.junit.JUnitRunner
 
-@RunWith(classOf[JUnitRunner])
 class CashAddrSpec extends FunSuite {
   test("valid checksums") {
     val inputs = Seq(

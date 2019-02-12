@@ -93,6 +93,10 @@ object ScriptFlags {
   val SCRIPT_ENABLE_CHECKDATASIG = (1 << 18)
 
 
+  // Making OP_CODESEPARATOR and FindAndDelete fail any non-segwit scripts
+  //
+  val SCRIPT_VERIFY_CONST_SCRIPTCODE = (1 << 16)
+
   /**
     * Mandatory script verification flags that all new blocks must comply with for
     * them to be valid. (but old blocks may not comply with) Currently just P2SH,
