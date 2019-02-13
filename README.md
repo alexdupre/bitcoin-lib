@@ -18,6 +18,7 @@ This is a simple scala library which implements most of the bitcoin cash protoco
 * BIP 39 (mnemonic code for generating deterministic keys)
 * BIP 70
 * CashAddr address format
+* Schnorr signature verification
 
 ## Objectives
 

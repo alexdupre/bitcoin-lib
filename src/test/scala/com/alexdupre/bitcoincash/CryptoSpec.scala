@@ -49,7 +49,7 @@ class CryptoSpec extends FlatSpec {
     val data = Crypto.sha256("this is a test".getBytes("UTF-8"))
     val (r, s) = Crypto.sign(data, privateKey)
     val encoded = Crypto.encodeSignature(r, s)
-    assert(Crypto.verifySignature(data, encoded, publicKey))
+    assert(Crypto.verifySignature(data, encoded, publicKey, 0))
   }
 
   it should "generate deterministic signatures" in {
@@ -123,8 +123,8 @@ class CryptoSpec extends FlatSpec {
     val (r, s) = Crypto.sign(message, priv)
     val (pub1, pub2) = recoverPublicKey((r, s), message)
 
-    assert(verifySignature(message, (r, s), pub1))
-    assert(verifySignature(message, (r, s), pub2))
+    assert(verifySignature(message, (r, s), pub1, 0))
+    assert(verifySignature(message, (r, s), pub2, 0))
     assert(pub == pub1 || pub == pub2)
   }
 
@@ -170,8 +170,8 @@ class CryptoSpec extends FlatSpec {
       val (r, s) = Crypto.sign(message, priv)
       val (pub1, pub2) = recoverPublicKey((r, s), message)
 
-      assert(verifySignature(message, (r, s), pub1))
-      assert(verifySignature(message, (r, s), pub2))
+      assert(verifySignature(message, (r, s), pub1, 0))
+      assert(verifySignature(message, (r, s), pub2, 0))
       assert(pub == pub1 || pub == pub2)
     }
   }

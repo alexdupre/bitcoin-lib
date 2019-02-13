@@ -12,7 +12,7 @@ import org.spongycastle.crypto.digests.{RIPEMD160Digest, SHA1Digest, SHA256Diges
 import org.spongycastle.crypto.macs.HMac
 import org.spongycastle.crypto.params.{ECDomainParameters, ECPrivateKeyParameters, ECPublicKeyParameters, KeyParameter}
 import org.spongycastle.crypto.signers.{ECDSASigner, HMacDSAKCalculator}
-import org.spongycastle.math.ec.ECPoint
+import org.spongycastle.math.ec.{ECCurve, ECPoint}
 
 import scala.util.Try
 
@@ -285,7 +285,7 @@ object Crypto {
 
   def encodeSignature(t: (BigInteger, BigInteger)): BinaryData = encodeSignature(t._1, t._2)
 
-  def isDERSignature(sig: Seq[Byte]): Boolean = {
+  def isValidDERSignatureEncoding(sig: Seq[Byte]): Boolean = {
     // Format: 0x30 [total-length] 0x02 [R-length] [R] 0x02 [S-length] [S]
     // * total-length: 1-byte length descriptor of everything that follows,
     //   excluding the sighash byte.
@@ -365,7 +365,7 @@ object Crypto {
     return true
   }
 
-  def isLowDERSignature(sig: Seq[Byte]): Boolean = isDERSignature(sig) && {
+  def isLowDERSignature(sig: Seq[Byte]): Boolean = isValidDERSignatureEncoding(sig) && {
     val (_, s) = decodeSignature(sig)
     s.compareTo(halfCurveOrder) <= 0
   }
@@ -385,12 +385,13 @@ object Crypto {
     else checkRawSignatureEncoding(sig, flags)
   }
 
-  def checkTransactionSignatureEncoding(sig: Seq[Byte], flags: Int): Boolean = {
+  def checkTransactionSignatureEncoding(sig: Seq[Byte], flags: Int, supportSchnorr: Boolean): Boolean = {
     import ScriptFlags._
     // Empty signature. Not strictly DER encoded, but allowed to provide a
     // compact way to provide an invalid signature for use with CHECK(MULTI)SIG
     if (sig.isEmpty) true
-    else if (!checkRawSignatureEncoding(sig.dropRight(1), flags)) false
+    else if (supportSchnorr && !checkRawSignatureEncoding(sig.dropRight(1), flags)) false
+    else if (!supportSchnorr && !checkRawECDSASignatureEncoding(sig.dropRight(1), flags)) false
     else if ((flags & SCRIPT_VERIFY_STRICTENC) != 0) {
       if (!isDefinedHashtypeSignature(sig)) false
       else {
@@ -404,11 +405,24 @@ object Crypto {
     else true
   }
 
-  def checkRawSignatureEncoding(sig: Seq[Byte], flags: Int): Boolean = {
+  def checkRawECDSASignatureEncoding(sig: Seq[Byte], flags: Int): Boolean = {
     import ScriptFlags._
-    if ((flags & (SCRIPT_VERIFY_DERSIG | SCRIPT_VERIFY_LOW_S | SCRIPT_VERIFY_STRICTENC)) != 0 && !isDERSignature(sig)) false
+    if ((flags & SCRIPT_ENABLE_SCHNORR) != 0 && (sig.size == 64)) {
+      // In an ECDSA-only context, 64-byte signatures are banned when
+      // Schnorr flag set.
+      false
+    } else if ((flags & (SCRIPT_VERIFY_DERSIG | SCRIPT_VERIFY_LOW_S | SCRIPT_VERIFY_STRICTENC)) != 0 && !isValidDERSignatureEncoding(sig)) false
     else if ((flags & SCRIPT_VERIFY_LOW_S) != 0 && !isLowDERSignature(sig)) false
     else true
+  }
+
+  def checkRawSignatureEncoding(sig: Seq[Byte], flags: Int): Boolean = {
+    import ScriptFlags._
+    if ((flags & SCRIPT_ENABLE_SCHNORR) != 0 && (sig.size == 64)) {
+      // In a generic-signature context, 64-byte signatures are interpreted
+      // as Schnorr signatures (always correctly encoded) when flag set.
+      true
+    } else checkRawECDSASignatureEncoding(sig, flags)
   }
 
   def checkPubKeyEncoding(key: Seq[Byte], flags: Int): Boolean = {
@@ -485,8 +499,8 @@ object Crypto {
 
   def decodeSignatureLax(input: BinaryData): (BigInteger, BigInteger) = decodeSignatureLax(new ByteArrayInputStream(input))
 
-  def verifySignature(data: Seq[Byte], signature: (BigInteger, BigInteger), publicKey: PublicKey): Boolean =
-    verifySignature(data, encodeSignature(signature), publicKey)
+  def verifySignature(data: Seq[Byte], signature: (BigInteger, BigInteger), publicKey: PublicKey, flags: Int): Boolean =
+    verifySignature(data, encodeSignature(signature), publicKey, flags)
 
   /**
     * @param data      data
@@ -494,7 +508,15 @@ object Crypto {
     * @param publicKey public key
     * @return true is signature is valid for this data with this public key
     */
-  def verifySignature(data: BinaryData, signature: BinaryData, publicKey: PublicKey): Boolean = Try {
+  def verifySignature(data: BinaryData, signature: BinaryData, publicKey: PublicKey, flags: Int): Boolean = {
+    if ((flags & ScriptFlags.SCRIPT_ENABLE_SCHNORR) != 0 && (signature.size == 64)) {
+      verifySchnorr(data, signature, publicKey)
+    } else {
+      verifyECDSA(data, signature, publicKey)
+    }
+  }
+
+  def verifyECDSA(data: BinaryData, signature: BinaryData, publicKey: PublicKey): Boolean = Try {
     if (Secp256k1Context.isEnabled) {
       val signature1 = normalizeSignature(signature)
       NativeSecp256k1.verify(data, signature1, publicKey.toBin)
@@ -510,6 +532,35 @@ object Crypto {
       signer.init(false, params)
       signer.verifySignature(data.toArray, r, s)
     }
+  }.toOption.getOrElse(false)
+
+  def verifySchnorr(data: BinaryData, signature: BinaryData, publicKey: PublicKey): Boolean = Try {
+    require(signature.size == 64, "signature size must be 64")
+    require(data.size == 32, "data size must be 32")
+    val (rx, s) = signature.splitAt(32)
+    require(Scalar(rx).value.compareTo(curve.getCurve.getField.getCharacteristic) < 0, "r must be < P")
+    require(Scalar(s).value.compareTo(curve.getN) < 0, "s must be < N")
+    // Compute e = int(hash(bytes(r) || bytes(P) || m)) mod n
+    val e = Scalar(sha256(rx ++ publicKey.value.toBin(true) ++ data)).mod(curve.getN)
+    require(e.value.compareTo(one) >= 0, "e must be >= 1")
+    // Let R = sG - eP.
+    val R = Scalar(s).toPoint substract publicKey.value.multiply(e)
+    val p = params.getCurve.getField.getCharacteristic
+    def jacobi(n: BigInteger) = n.modPow(p.shiftRight(1), p)
+    val jacobiY = R.value.getCurve.getCoordinateSystem match {
+      case ECCurve.COORD_JACOBIAN | ECCurve.COORD_JACOBIAN_MODIFIED =>
+        jacobi(R.getYCoord.toBigInteger.multiply(R.getZCoord(0).toBigInteger).mod(p))
+      case _ =>
+        jacobi(R.normalize.getYCoord.toBigInteger)
+    }
+    val rxMatches = R.value.getCurve.getCoordinateSystem match {
+      case ECCurve.COORD_JACOBIAN | ECCurve.COORD_JACOBIAN_MODIFIED =>
+        R.getXCoord.toBigInteger.compareTo(Scalar(rx).value.multiply(R.getZCoord(0).toBigInteger.pow(2)).mod(p)) == 0
+      case _ =>
+        R.value.normalize().getXCoord.toBigInteger.compareTo(Scalar(rx).value) == 0
+    }
+    // Fail if infinite(R) or jacobi(y(R)) ≠ 1 or x(R) ≠ r.
+    if (R.isInfinity || jacobiY.compareTo(BigInteger.ONE) != 0 || !rxMatches) false else true
   }.toOption.getOrElse(false)
 
   /**

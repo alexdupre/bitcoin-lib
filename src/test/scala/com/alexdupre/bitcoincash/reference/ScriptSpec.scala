@@ -64,7 +64,9 @@ object ScriptSpec {
     "COMPRESSED_PUBKEYTYPE" -> SCRIPT_VERIFY_COMPRESSED_PUBKEYTYPE,
     "SIGHASH_FORKID" -> SCRIPT_ENABLE_SIGHASH_FORKID,
     "REPLAY_PROTECTION" -> SCRIPT_ENABLE_REPLAY_PROTECTION,
-    "CHECKDATASIG" -> SCRIPT_ENABLE_CHECKDATASIG
+    "CHECKDATASIG" -> SCRIPT_ENABLE_CHECKDATASIG,
+    "SCHNORR" -> SCRIPT_ENABLE_SCHNORR,
+    "ALLOW_SEGWIT_RECOVERY" -> SCRIPT_ALLOW_SEGWIT_RECOVERY
   )
 
   def parseScriptFlags(strFlags: String): Int = if (strFlags.isEmpty) 0 else strFlags.split(",").map(mapFlagNames(_)).foldLeft(0)(_ | _)
@@ -93,7 +95,7 @@ object ScriptSpec {
     val result = Try(runner.verifyScripts(scriptSig, scriptPubKey)).getOrElse(false)
     val expected = expectedText == "OK"
     if (result != expected) {
-      throw new RuntimeException(comments.getOrElse(""))
+      throw new RuntimeException(comments.getOrElse(s"ScriptSig: $scriptSigText - ScriptPubKey: $scriptPubKeyText - Flags: $flags - Expected: $expectedText"))
     }
   }
 
