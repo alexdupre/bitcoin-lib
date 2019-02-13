@@ -40,7 +40,7 @@ Our goal is not to re-implement a full Litecoin node but to build a library that
 libraryDependencies += "com.alexdupre" %% "litecoin-lib" % "0.9.18"
 ```
 
-The latest released version is 0.9.17
+The latest released version is 0.9.18
 
 ## Segwit support
 

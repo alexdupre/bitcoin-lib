@@ -2,7 +2,7 @@ organization := "com.alexdupre"
 
 name := "litecoin-lib"
 
-version := "0.9.18"
+version := "0.9.19-SNAPSHOT"
 
 crossScalaVersions := Seq("2.11.12", "2.12.8")
 
