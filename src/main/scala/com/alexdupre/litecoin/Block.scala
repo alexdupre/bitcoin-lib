@@ -69,15 +69,18 @@ object BlockHeader extends LtcSerializer[BlockHeader] {
 
   def calculateNextWorkRequired(lastHeader: BlockHeader, lastRetargetTime: Long): Long = {
     var actualTimespan = lastHeader.time - lastRetargetTime
-    val targetTimespan = 14 * 24 * 60 * 60 // two weeks
+    val targetTimespan = (3.5 * 24 * 60 * 60).toInt // 3.5 days
     if (actualTimespan < targetTimespan / 4) actualTimespan = targetTimespan / 4
     if (actualTimespan > targetTimespan * 4) actualTimespan = targetTimespan * 4
 
     var (target, false, false) = decodeCompact(lastHeader.bits)
+    val powLimit = new BigInteger(1, BinaryData("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"))
+    val shift = target.bitLength() > powLimit.bitLength() - 1
+    if (shift) target.shiftRight(1)
     target = target.multiply(BigInteger.valueOf(actualTimespan))
     target = target.divide(BigInteger.valueOf(targetTimespan))
+    if (shift) target.shiftLeft(1)
 
-    val powLimit = new BigInteger(1, BinaryData("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"))
     target = target.min(powLimit)
     encodeCompact(target)
   }
