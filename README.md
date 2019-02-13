@@ -36,10 +36,10 @@ Our goal is not to re-implement a full Bitcoin Cash node but to build a library 
 * releases and milestones are pushed to maven central
 
 ```scala
-libraryDependencies += "com.alexdupre" %% "bitcoincash-lib" % "0.9.19"
+libraryDependencies += "com.alexdupre" %% "bitcoincash-lib" % "0.9.20"
 ```
 
-The latest released version is 0.9.18
+The latest released version is 0.9.20
 
 ## Usage
 
