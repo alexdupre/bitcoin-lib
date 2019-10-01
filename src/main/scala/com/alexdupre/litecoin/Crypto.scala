@@ -13,6 +13,7 @@ import org.spongycastle.crypto.macs.HMac
 import org.spongycastle.crypto.params.{ECDomainParameters, ECPrivateKeyParameters, ECPublicKeyParameters, KeyParameter}
 import org.spongycastle.crypto.signers.{ECDSASigner, HMacDSAKCalculator}
 import org.spongycastle.math.ec.ECPoint
+import scodec.bits.ByteVector
 
 
 object Crypto {
@@ -29,198 +30,182 @@ object Crypto {
     logger.info("couldn't find secp256k1 library, defaulting to spongycastle")
   }
 
-  def fixSize(data: BinaryData): BinaryData = data.length match {
-    case 32 => data
-    case length if length < 32 => Array.fill(32 - length)(0.toByte) ++ data
-  }
+  def fixSize(data: ByteVector): ByteVector32 = ByteVector32(data.padLeft(32))
 
   /**
-    * A scalar is a 256 bit number
+    * Secp256k1 private key, which a 32 bytes value
+    * We assume that private keys are compressed i.e. that the corresponding public key is compressed
     *
-    * @param value value to initialize this scalar with
+    * @param value value to initialize this key with
     */
-  case class Scalar(value: BigInteger) {
-    def add(scalar: Scalar): Scalar = if (Secp256k1Context.isEnabled)
-      Scalar(NativeSecp256k1.privKeyTweakAdd(toBin, scalar.toBin))
+  case class PrivateKey(value: ByteVector32) {
+    def add(that: PrivateKey): PrivateKey = if (Secp256k1Context.isEnabled)
+      PrivateKey(ByteVector.view(NativeSecp256k1.privKeyTweakAdd(value.toArray, that.value.toArray)))
     else
-      Scalar(value.add(scalar.value)).mod(Crypto.curve.getN)
+      PrivateKey(bigInt.add(that.bigInt).mod(Crypto.curve.getN))
 
-    def substract(scalar: Scalar): Scalar = Scalar(value.subtract(scalar.value)).mod(Crypto.curve.getN)
-
-    def multiply(scalar: Scalar): Scalar = if (Secp256k1Context.isEnabled)
-      Scalar(NativeSecp256k1.privKeyTweakMul(toBin, scalar.toBin))
+    def subtract(that: PrivateKey): PrivateKey = if (Secp256k1Context.isEnabled)
+      PrivateKey(ByteVector.view(NativeSecp256k1.privKeyTweakAdd(value.toArray, NativeSecp256k1.privKeyNegate(that.value.toArray))))
     else
-      Scalar(value.multiply(scalar.value).mod(Crypto.curve.getN))
+      PrivateKey(bigInt.subtract(that.bigInt).mod(Crypto.curve.getN))
 
-    def +(that: Scalar): Scalar = add(that)
-
-    def -(that: Scalar): Scalar = substract(that)
-
-    def *(that: Scalar): Scalar = multiply(that)
-
-    def isZero: Boolean = value == BigInteger.ZERO
-
-    /**
-      *
-      * @return a 32 bytes binary representation of this value
-      */
-    def toBin: BinaryData = fixSize(value.toByteArray.dropWhile(_ == 0))
-
-    /**
-      *
-      * @return this * G where G is the curve generator
-      */
-    def toPoint: Point = if (Secp256k1Context.isEnabled)
-      Point(NativeSecp256k1.computePubkey(toBin, false))
+    def multiply(that: PrivateKey): PrivateKey = if (Secp256k1Context.isEnabled)
+      PrivateKey(ByteVector.view(NativeSecp256k1.privKeyTweakMul(value.toArray, that.value.toArray)))
     else
-      Point(params.getG() * value)
+      PrivateKey(bigInt.multiply(that.bigInt).mod(Crypto.curve.getN))
 
-    override def toString = this.toBin.toString
-  }
+    def +(that: PrivateKey): PrivateKey = add(that)
 
-  object Scalar {
-    def apply(data: BinaryData): Scalar = {
-      require(data.length == 32, "scalar must be initialized with a 32 bytes value")
-      new Scalar(new BigInteger(1, data))
+    def -(that: PrivateKey): PrivateKey = subtract(that)
+
+    def *(that: PrivateKey): PrivateKey = multiply(that)
+
+    def isZero: Boolean = bigInt == BigInteger.ZERO
+
+    // used only if secp256k1 is not available
+    lazy val bigInt = new BigInteger(1, value.toArray)
+
+    def publicKey: PublicKey = if (Secp256k1Context.isEnabled) {
+      PublicKey.fromBin(ByteVector.view(NativeSecp256k1.computePubkey(value.toArray)))
+    } else {
+      PublicKey(ByteVector.view(params.getG().multiply(bigInt).getEncoded(true)))
     }
+
+    /**
+      *
+      * @param prefix Private key prefix
+      * @return the private key in Base58 (WIF) compressed format
+      */
+    def toBase58(prefix: Byte) = Base58Check.encode(prefix, value.bytes :+ 1.toByte)
   }
-
-  implicit def scalar2biginteger(scalar: Scalar): BigInteger = scalar.value
-
-  implicit def biginteger2scalar(value: BigInteger): Scalar = Scalar(value)
-
-  implicit def bin2scalar(value: BinaryData): Scalar = Scalar(value)
-
-  implicit def scalar2bin(scalar: Scalar): BinaryData = scalar.toBin
 
   object PrivateKey {
-    def apply(data: BinaryData): PrivateKey = data.length match {
-      case 32 => new PrivateKey(Scalar(data), compressed = false)
-      case 33 if data.last == 1 => new PrivateKey(Scalar(data.take(32)), compressed = true)
+    def apply(data: ByteVector): PrivateKey = new PrivateKey(ByteVector32(data.take(32)))
+
+    def apply(data: BigInteger): PrivateKey = {
+      new PrivateKey(fixSize(ByteVector.view(data.toByteArray.dropWhile(_ == 0.toByte))))
     }
 
-    def apply(data: BinaryData, compressed: Boolean): PrivateKey = new PrivateKey(Scalar(data.take(32)), compressed)
+    /**
+      *
+      * @param data serialized private key in bitcoin format
+      * @return the de-serialized key
+      */
+    def fromBin(data: ByteVector): (PrivateKey, Boolean) = {
+      val compressed = data.length match {
+        case 32 => false
+        case 33 if data.last == 1.toByte => true
+      }
+      (PrivateKey(data.take(32)), compressed)
+    }
 
-    def fromBase58(value: String, prefix: Byte): PrivateKey = {
+    def fromBase58(value: String, prefix: Byte): (PrivateKey, Boolean) = {
       require(Set(Base58.Prefix.SecretKey, Base58.Prefix.SecretKeyTestnet).contains(prefix), "invalid base 58 prefix for a private key")
       val (`prefix`, data) = Base58Check.decode(value)
-      PrivateKey(data)
+      fromBin(data)
     }
   }
 
   /**
+    * Secp256k1 Public key
+    * We assume that public keys are always compressed
     *
-    * @param value      value of this private key (a number)
-    * @param compressed flags which specifies if the associated public key will be compressed or uncompressed.
+    * @param value serialized public key, in compressed format (33 bytes)
     */
-  case class PrivateKey(value: Scalar, compressed: Boolean = true) {
-    /**
-      *
-      * @return the public key for this private key
-      */
-    def publicKey: PublicKey = PublicKey(value.toPoint, compressed)
+  case class PublicKey(value: ByteVector) {
+    require(value.length == 33)
+    require(isPubKeyValidLax(value))
 
-    /**
-      *
-      * @return the binary representation of this private key. It is either 32 bytes, or 33 bytes with final 0x1 if the
-      *         key is compressed
-      */
-    def toBin: BinaryData = if (compressed) value.toBin :+ 1.toByte else value.toBin
 
-    override def toString = toBin.toString
+    def hash160: ByteVector = Crypto.hash160(value)
+
+    def isValid: Boolean = isPubKeyValidStrict(this.value)
+
+    def add(that: PublicKey): PublicKey = if (Secp256k1Context.isEnabled) {
+      PublicKey.fromBin(ByteVector.view(NativeSecp256k1.pubKeyAdd(value.toArray, that.value.toArray)))
+    } else {
+      PublicKey(ecpoint.add(that.ecpoint).normalize())
+    }
+
+    def add(that: PrivateKey): PublicKey = if (Secp256k1Context.isEnabled) {
+      PublicKey.fromBin(ByteVector.view(NativeSecp256k1.privKeyTweakAdd(value.toArray, that.value.toArray)))
+    } else {
+      add(that.publicKey)
+    }
+
+    def subtract(that: PublicKey): PublicKey = if (Secp256k1Context.isEnabled) {
+      PublicKey.fromBin(ByteVector.view(NativeSecp256k1.pubKeyAdd(value.toArray, NativeSecp256k1.pubKeyNegate(that.value.toArray))))
+    } else {
+      PublicKey(ecpoint.subtract(that.ecpoint).normalize())
+    }
+
+    def multiply(that: PrivateKey): PublicKey = if (Secp256k1Context.isEnabled) {
+      PublicKey.fromBin(ByteVector.view(NativeSecp256k1.pubKeyTweakMul(value.toArray, that.value.toArray)))
+    } else {
+      PublicKey(ecpoint.multiply(that.bigInt).normalize())
+    }
+
+    def +(that: PublicKey): PublicKey = add(that)
+
+    def -(that: PublicKey): PublicKey = subtract(that)
+
+    def *(that: PrivateKey): PublicKey = multiply(that)
+
+    def toUncompressedBin: ByteVector = if (Secp256k1Context.isEnabled) {
+      ByteVector.view(NativeSecp256k1.parsePubkey(value.toArray))
+    } else {
+      ByteVector.view(ecpoint.getEncoded(false))
+    }
+
+    override def toString = value.toHex
+
+    // used only if secp256k1 is not available
+    lazy val ecpoint = curve.getCurve.decodePoint(value.toArray)
   }
-
-  implicit def privatekey2scalar(priv: PrivateKey): Scalar = priv.value
-
-  /**
-    * Curve point
-    *
-    * @param value ecPoint to initialize this point with
-    */
-  case class Point(value: ECPoint) {
-    def add(point: Point): Point = Point(value.add(point.value))
-
-    def substract(point: Point): Point = Point(value.subtract(point.value))
-
-    def multiply(scalar: Scalar): Point = if (Secp256k1Context.isEnabled)
-      Point(NativeSecp256k1.pubKeyTweakMul(toBin(true), scalar.toBin, false))
-    else
-      Point(value.multiply(scalar.value))
-
-    def normalize = Point(value.normalize())
-
-    def +(that: Point): Point = add(that)
-
-    def -(that: Point): Point = substract(that)
-
-    def *(that: Scalar): Point = multiply(that)
-
-    /**
-      *
-      * @return a binary representation of this point in DER format
-      */
-    def toBin(compressed: Boolean): BinaryData = value.getEncoded(compressed)
-
-    // because ECPoint is not serializable
-    protected def writeReplace: Object = PointProxy(toBin(true))
-
-    override def toString = toBin(true).toString
-
-  }
-
-  case class PointProxy(bin: BinaryData) {
-    def readResolve: Object = Point(bin)
-  }
-
-  object Point {
-    def apply(data: BinaryData): Point = if (Secp256k1Context.isEnabled)
-      Point(curve.getCurve.decodePoint(NativeSecp256k1.decompress(data)))
-    else
-      Point(curve.getCurve.decodePoint(data))
-  }
-
-  implicit def point2ecpoint(point: Point): ECPoint = point.value
-
-  implicit def ecpoint2point(value: ECPoint): Point = Point(value)
 
   object PublicKey {
-    def apply(point: Point) = new PublicKey(point.toBin(true))
-    def apply(point: Point, compressed: Boolean) = new PublicKey(point.toBin(compressed))
-  }
-
-  /**
-    *
-    * @param raw          serialized value of this public key (a point)
-    * @param checkValid   indicates whether or not we check that this is a valid public key; this should be used
-    *                     carefully for optimization purposes
-    */
-  case class PublicKey(raw: BinaryData, checkValid: Boolean = true) {
-    // we always make this very basic check
-    require(isPubKeyValid(raw))
-    if (checkValid) {
-      // this is expensive and done only if needed
-      require(value.isInstanceOf[Point])
-    }
-
-    lazy val compressed = isPubKeyCompressed(raw)
-
-    lazy val value: Point = Point(raw)
-
-    def toBin: BinaryData = raw
+    def apply(data: ECPoint): PublicKey = new PublicKey(ByteVector.view(data.getEncoded(true)))
 
     /**
-      *
-      * @return the hash160 of the binary representation of this point. This can be used to generated addresses (the address
-      *         of a public key is he base58 encoding of its hash)
+      * @param raw        serialized value of this public key (a point)
+      * @param checkValid indicates whether or not we check that this is a valid public key; this should be used
+      *                   carefully for optimization purposes
+      * @return
       */
-    def hash160: BinaryData = Crypto.hash160(raw)
+    def apply(raw: ByteVector, checkValid: Boolean): PublicKey = fromBin(raw, checkValid)
 
-    override def toString = toBin.toString
+    def fromBin(input: ByteVector, checkValid: Boolean = true): PublicKey = {
+      if (checkValid) require(isPubKeyValidStrict(input))
+
+      input.length match {
+        case 33 => PublicKey(input)
+        case 65 => toCompressedUnsafe(input.toArray)
+      }
+    }
+
+    /**
+      * This function initializes a public key from a compressed/uncompressed representation without doing validity checks.
+      *
+      * This will always convert the key to its compressed representation
+      *
+      * Note that this mutates the input array!
+      *
+      * @param key 33 or 65 bytes public key (will be mutated)
+      * @return an immutable compressed public key
+      */
+    private def toCompressedUnsafe(key: Array[Byte]): PublicKey = {
+      key.length match {
+        case 65 if key(0) == 4 || key(0) == 6 || key(0) == 7 =>
+          key(0) = if ((key(64) & 0x01) != 0) 0x03.toByte else 0x02.toByte
+          new PublicKey(ByteVector(key, 0, 33))
+        case 33 if key(0) == 2 || key(0) == 3 =>
+          new PublicKey(ByteVector(key, 0, 33))
+        case _ =>
+          throw new IllegalArgumentException(s"key must be 33 or 65 bytes")
+      }
+    }
   }
 
-  implicit def publickey2point(pub: PublicKey): Point = pub.value
-
-  implicit def publickey2bin(pub: PublicKey): BinaryData = pub.toBin
 
   /**
     * Computes ecdh using secp256k1's variant: sha256(priv * pub serialized in compressed format)
@@ -229,29 +214,32 @@ object Crypto {
     * @param pub  public value
     * @return ecdh(priv, pub) as computed by libsecp256k1
     */
-  def ecdh(priv: Scalar, pub: Point): BinaryData = {
-    Crypto.sha256(pub.multiply(priv).getEncoded(true))
+  def ecdh(priv: PrivateKey, pub: PublicKey): ByteVector32 = {
+    if (Secp256k1Context.isEnabled)
+      ByteVector32(ByteVector.view(NativeSecp256k1.createECDHSecret(priv.value.toArray, pub.value.toArray)))
+    else
+      Crypto.sha256(ByteVector.view(pub.multiply(priv).ecpoint.getEncoded(true)))
   }
 
-  def hmac512(key: Seq[Byte], data: Seq[Byte]): BinaryData = {
+  def hmac512(key: ByteVector, data: ByteVector): ByteVector = {
     val mac = new HMac(new SHA512Digest())
     mac.init(new KeyParameter(key.toArray))
-    mac.update(data.toArray, 0, data.length)
+    mac.update(data.toArray, 0, data.length.toInt)
     val out = new Array[Byte](64)
     mac.doFinal(out, 0)
-    out
+    ByteVector.view(out)
   }
 
-  def hash(digest: Digest)(input: Seq[Byte]): BinaryData = {
-    digest.update(input.toArray, 0, input.length)
+  def hash(digest: Digest)(input: ByteVector): ByteVector = {
+    digest.update(input.toArray, 0, input.length.toInt)
     val out = new Array[Byte](digest.getDigestSize)
     digest.doFinal(out, 0)
-    out
+    ByteVector.view(out)
   }
 
   def sha1 = hash(new SHA1Digest) _
 
-  def sha256 = hash(new SHA256Digest) _
+  def sha256 = (x: ByteVector) => ByteVector32(hash(new SHA256Digest)(x))
 
   def ripemd160 = hash(new RIPEMD160Digest) _
 
@@ -262,7 +250,7 @@ object Crypto {
     * @param input array of byte
     * @return the 160 bits LTC hash of input
     */
-  def hash160(input: Seq[Byte]) = ripemd160(sha256(input))
+  def hash160(input: ByteVector): ByteVector = ripemd160(sha256(input))
 
   /**
     * 256 bits litecoin hash
@@ -271,28 +259,13 @@ object Crypto {
     * @param input array of byte
     * @return the 256 bits LTC hash of input
     */
-  def hash256(input: Seq[Byte]) = sha256(sha256(input))
+  def hash256(input: ByteVector): ByteVector32 = ByteVector32(sha256(sha256(input)))
 
-  /**
-    * An ECDSA signature is a (r, s) pair. Litecoin uses DER encoded signatures
-    *
-    * @param r first value
-    * @param s second value
-    * @return (r, s) in DER format
-    */
-  def encodeSignature(r: BigInteger, s: BigInteger): BinaryData = {
-    // Usually 70-72 bytes
-    val bos = new ByteArrayOutputStream(72)
-    val seq = new DERSequenceGenerator(bos)
-    seq.addObject(new ASN1Integer(r))
-    seq.addObject(new ASN1Integer(s))
-    seq.close()
-    bos.toByteArray
+  private def encodeSignatureCompact(r: BigInteger, s: BigInteger): ByteVector64 = {
+    ByteVector64(ByteVector.view(r.toByteArray.dropWhile(_ == 0)).padLeft(32) ++ ByteVector.view(s.toByteArray.dropWhile(_ == 0)).padLeft(32))
   }
 
-  def encodeSignature(t: (BigInteger, BigInteger)): BinaryData = encodeSignature(t._1, t._2)
-
-  def isDERSignature(sig: Seq[Byte]): Boolean = {
+  def isDERSignature(sig: ByteVector): Boolean = {
     // Format: 0x30 [total-length] 0x02 [R-length] [R] 0x02 [S-length] [S] [sighash]
     // * total-length: 1-byte length descriptor of everything that follows,
     //   excluding the sighash byte.
@@ -357,22 +330,17 @@ object Crypto {
     return true
   }
 
-  def isLowDERSignature(sig: Seq[Byte]): Boolean = isDERSignature(sig) && {
-    val (_, s) = decodeSignature(sig)
+  def isLowDERSignature(sig: ByteVector): Boolean = isDERSignature(sig) && {
+    val (_, s) = decodeSignatureFromDER(sig)
     s.compareTo(halfCurveOrder) <= 0
   }
 
-  def normalizeSignature(r: BigInteger, s: BigInteger): (BigInteger, BigInteger) = {
+  private def normalizeSignature(r: BigInteger, s: BigInteger): (BigInteger, BigInteger) = {
     val s1 = if (s.compareTo(halfCurveOrder) > 0) curve.getN().subtract(s) else s
     (r, s1)
   }
 
-  def normalizeSignature(sig: BinaryData): BinaryData = {
-    val (r, s) = decodeSignature(sig)
-    encodeSignature(normalizeSignature(r, s))
-  }
-
-  def checkSignatureEncoding(sig: Seq[Byte], flags: Int): Boolean = {
+  def checkSignatureEncoding(sig: ByteVector, flags: Int): Boolean = {
     import ScriptFlags._
     // Empty signature. Not strictly DER encoded, but allowed to provide a
     // compact way to provide an invalid signature for use with CHECK(MULTI)SIG
@@ -383,7 +351,7 @@ object Crypto {
     else true
   }
 
-  def checkPubKeyEncoding(key: Seq[Byte], flags: Int, sigVersion: Int): Boolean = {
+  def checkPubKeyEncoding(key: ByteVector, flags: Int, sigVersion: Int): Boolean = {
     if ((flags & ScriptFlags.SCRIPT_VERIFY_STRICTENC) != 0) require(isPubKeyCompressedOrUncompressed(key), "invalid public key")
     // Only compressed keys are accepted in segwit
     if ((flags & ScriptFlags.SCRIPT_VERIFY_WITNESS_PUBKEYTYPE) != 0 && sigVersion == SigVersion.SIGVERSION_WITNESS_V0) require(isPubKeyCompressed(key), "public key must be compressed in segwit")
@@ -396,26 +364,37 @@ object Crypto {
     * @return true if the key is valid. Please not that this performs very basic tests and does not check that the
     *         point represented by this key is actually valid.
     */
-  def isPubKeyValid(key: Seq[Byte]): Boolean = key.length match {
+  def isPubKeyValidLax(key: ByteVector): Boolean = key.length match {
     case 65 if key(0) == 4 || key(0) == 6 || key(0) == 7 => true
     case 33 if key(0) == 2 || key(0) == 3 => true
     case _ => false
   }
 
-  def isPubKeyCompressedOrUncompressed(key: Seq[Byte]): Boolean = key.length match {
+  /**
+    *
+    * @param key serialized public key
+    * @return true if the key is valid. This check is much more expensive than its lax version since here we check that
+    *         the public key is a valid point on the secp256k1 curve
+    */
+  def isPubKeyValidStrict(key: ByteVector): Boolean = isPubKeyValidLax(key) && {
+    if (Secp256k1Context.isEnabled)
+      NativeSecp256k1.parsePubkey(key.toArray).length == 65
+    else
+      curve.getCurve.decodePoint(key.toArray).normalize().isValid
+  }
+
+  def isPubKeyCompressedOrUncompressed(key: ByteVector): Boolean = key.length match {
     case 65 if key(0) == 4 => true
     case 33 if key(0) == 2 || key(0) == 3 => true
     case _ => false
   }
 
-  def isPubKeyCompressed(key: Seq[Byte]): Boolean = key.length match {
+  def isPubKeyCompressed(key: ByteVector): Boolean = key.length match {
     case 33 if key(0) == 2 || key(0) == 3 => true
     case _ => false
   }
 
-  def isPrivateKeyCompressed(key: PrivateKey): Boolean = key.compressed
-
-  def isDefinedHashtypeSignature(sig: Seq[Byte]): Boolean = if (sig.isEmpty) false
+  def isDefinedHashtypeSignature(sig: ByteVector): Boolean = if (sig.isEmpty) false
   else {
     val hashType = (sig.last & 0xff) & (~(SIGHASH_ANYONECANPAY))
     if (hashType < SIGHASH_ALL || hashType > SIGHASH_SINGLE) false else true
@@ -427,11 +406,11 @@ object Crypto {
     * @param blob sigbyte data
     * @return the decoded (r, s) signature
     */
-  def decodeSignature(blob: Seq[Byte]): (BigInteger, BigInteger) = {
-    decodeSignatureLax(blob)
+  private def decodeSignatureFromDER(blob: ByteVector): (BigInteger, BigInteger) = {
+    decodeSignatureFromDERLax(blob)
   }
 
-  def decodeSignatureLax(input: ByteArrayInputStream): (BigInteger, BigInteger) = {
+  private def decodeSignatureFromDERLax(input: ByteArrayInputStream): (BigInteger, BigInteger) = {
     require(input.read() == 0x30)
 
     def readLength: Int = {
@@ -459,10 +438,31 @@ object Crypto {
     (new BigInteger(1, r), new BigInteger(1, s))
   }
 
-  def decodeSignatureLax(input: BinaryData): (BigInteger, BigInteger) = decodeSignatureLax(new ByteArrayInputStream(input))
+  private def decodeSignatureFromDERLax(input: ByteVector): (BigInteger, BigInteger) = decodeSignatureFromDERLax(new ByteArrayInputStream(input.toArray))
 
-  def verifySignature(data: Seq[Byte], signature: (BigInteger, BigInteger), publicKey: PublicKey): Boolean =
-    verifySignature(data, encodeSignature(signature), publicKey)
+  private def decodeSignatureCompact(signature: ByteVector64): (BigInteger, BigInteger) = {
+    val r = new BigInteger(1, signature.take(32).toArray)
+    val s = new BigInteger(1, signature.takeRight(32).toArray)
+    (r, s)
+  }
+
+  def compact2der(signature: ByteVector64): ByteVector = {
+    val r = new BigInteger(1, signature.take(32).toArray)
+    val s = new BigInteger(1, signature.takeRight(32).toArray)
+    val (r1, s1) = normalizeSignature(r, s)
+    val bos = new ByteArrayOutputStream(73)
+    val seq = new DERSequenceGenerator(bos)
+    seq.addObject(new ASN1Integer(r1))
+    seq.addObject(new ASN1Integer(s1))
+    seq.close()
+    ByteVector.view(bos.toByteArray)
+  }
+
+  def der2compact(signature: ByteVector): ByteVector64 = {
+    val (r, s) = decodeSignatureFromDERLax(signature)
+    val (r1, s1) = normalizeSignature(r, s)
+    ByteVector64(ByteVector.view(r1.toByteArray.dropWhile(_ == 0)).padLeft(32) ++ ByteVector.view(s1.toByteArray.dropWhile(_ == 0)).padLeft(32))
+  }
 
   /**
     * @param data      data
@@ -470,20 +470,18 @@ object Crypto {
     * @param publicKey public key
     * @return true is signature is valid for this data with this public key
     */
-  def verifySignature(data: BinaryData, signature: BinaryData, publicKey: PublicKey): Boolean = {
+  def verifySignature(data: ByteVector, signature: ByteVector64, publicKey: PublicKey): Boolean = {
     if (Secp256k1Context.isEnabled) {
-      val signature1 = normalizeSignature(signature)
-      val native = NativeSecp256k1.verify(data, signature1, publicKey.toBin)
-      native
+      NativeSecp256k1.verify(data.toArray, signature.toArray, publicKey.value.toArray)
     } else {
-      val (r, s) = decodeSignature(signature)
+      val (r, s) = decodeSignatureCompact(signature)
       require(r.compareTo(one) >= 0, "r must be >= 1")
       require(r.compareTo(curve.getN) < 0, "r must be < N")
       require(s.compareTo(one) >= 0, "s must be >= 1")
       require(s.compareTo(curve.getN) < 0, "s must be < N")
 
       val signer = new ECDSASigner
-      val params = new ECPublicKeyParameters(publicKey.value, curve)
+      val params = new ECPublicKeyParameters(publicKey.ecpoint, curve)
       signer.init(false, params)
       signer.verifySignature(data.toArray, r, s)
     }
@@ -494,7 +492,7 @@ object Crypto {
     * @param privateKey private key
     * @return the corresponding public key
     */
-  def publicKeyFromPrivateKey(privateKey: BinaryData) = PrivateKey(privateKey).publicKey
+  def publicKeyFromPrivateKey(privateKey: ByteVector) = PrivateKey(privateKey).publicKey
 
   /**
     * Sign data with a private key, using RCF6979 deterministic signatures
@@ -502,25 +500,27 @@ object Crypto {
     * @param data       data to sign
     * @param privateKey private key. If you are using litecoin "compressed" private keys make sure to only use the first 32 bytes of
     *                   the key (there is an extra "1" appended to the key)
-    * @return a (r, s) ECDSA signature pair
+    * @return a signature in compact format (64 bytes)
     */
-  def sign(data: BinaryData, privateKey: PrivateKey): (BigInteger, BigInteger) = {
+  def sign(data: Array[Byte], privateKey: PrivateKey): ByteVector64 = {
     if (Secp256k1Context.isEnabled) {
-      val bin = NativeSecp256k1.sign(data, privateKey.value.toBin)
-      Crypto.decodeSignature(bin)
+      val bin = NativeSecp256k1.signCompact(data, privateKey.value.toArray)
+      ByteVector64(ByteVector.view(bin))
     } else {
       val signer = new ECDSASigner(new HMacDSAKCalculator(new SHA256Digest))
-      val privateKeyParameters = new ECPrivateKeyParameters(privateKey.value, curve)
+      val privateKeyParameters = new ECPrivateKeyParameters(privateKey.bigInt, curve)
       signer.init(true, privateKeyParameters)
-      val Array(r, s) = signer.generateSignature(data.toArray)
-
-      if (s.compareTo(halfCurveOrder) > 0) {
+      val Array(r, s) = signer.generateSignature(data)
+      val (r1, s1) = if (s.compareTo(halfCurveOrder) > 0) {
         (r, curve.getN().subtract(s)) // if s > N/2 then s = N - s
       } else {
         (r, s)
       }
+      encodeSignatureCompact(r1, s1)
     }
   }
+
+  def sign(data: ByteVector, privateKey: PrivateKey): ByteVector64 = sign(data.toArray, privateKey)
 
   /**
     *
@@ -528,7 +528,7 @@ object Crypto {
     * @return a tuple (p1, p2) where p1 and p2 are points on the curve and p1.x = p2.x = x
     *         p1.y is even, p2.y is odd
     */
-  def recoverPoint(x: BigInteger): (Point, Point) = {
+  private def recoverPoint(x: BigInteger): (ECPoint, ECPoint) = {
     val x1 = Crypto.curve.getCurve.fromBigInteger(x)
     val square = x1.square().add(Crypto.curve.getCurve.getA).multiply(x1).add(Crypto.curve.getCurve.getB)
     val y1 = square.sqrt()
@@ -542,20 +542,18 @@ object Crypto {
     * Recover public keys from a signature and the message that was signed. This method will return 2 public keys, and the signature
     * can be verified with both, but only one of them matches that private key that was used to generate the signature.
     *
-    * @param t       signature
-    * @param message message that was signed
+    * @param signature signature
+    * @param message   message that was signed
     * @return a (pub1, pub2) tuple where pub1 and pub2 are candidates public keys. If you have the recovery id  then use
     *         pub1 if the recovery id is even and pub2 if it is odd
     */
-  def recoverPublicKey(t: (BigInteger, BigInteger), message: BinaryData): (PublicKey, PublicKey) = {
-    val (r, s) = t
-    val m = new BigInteger(1, message)
+  def recoverPublicKey(signature: ByteVector64, message: ByteVector): (PublicKey, PublicKey) = {
+    val (r, s) = decodeSignatureCompact(signature)
+    val m = new BigInteger(1, message.toArray)
 
     val (p1, p2) = recoverPoint(r)
     val Q1 = (p1.multiply(s).subtract(Crypto.curve.getG.multiply(m))).multiply(r.modInverse(Crypto.curve.getN))
     val Q2 = (p2.multiply(s).subtract(Crypto.curve.getG.multiply(m))).multiply(r.modInverse(Crypto.curve.getN))
     (PublicKey(Q1), PublicKey(Q2))
   }
-
-  def recoverPublicKey(sig: BinaryData, message: BinaryData): (PublicKey, PublicKey) = recoverPublicKey(Crypto.decodeSignature(sig), message)
 }

@@ -7,6 +7,7 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonAST.{JArray, JInt, JString, JValue}
 import org.json4s.jackson.JsonMethods
 import org.scalatest.{FlatSpec, Matchers}
+import scodec.bits.ByteVector
 
 import scala.util.{Failure, Success, Try}
 
@@ -17,17 +18,17 @@ object TransactionSpec {
     json.extract[List[List[JValue]]].map(_ match {
       case JString(value) :: Nil => comment = value
       case JArray(m) :: JString(serializedTransaction) :: JString(verifyFlags) :: Nil => {
-        val prevoutMap = collection.mutable.HashMap.empty[OutPoint, BinaryData]
+        val prevoutMap = collection.mutable.HashMap.empty[OutPoint, ByteVector]
         val prevamountMap = collection.mutable.HashMap.empty[OutPoint, Satoshi]
         m.map(_ match {
           case JArray(List(JString(hash), JInt(index), JString(scriptPubKey))) => {
             val prevoutScript = ScriptSpec.parseFromText(scriptPubKey)
-            prevoutMap += OutPoint(fromHexString(hash).reverse, index.toLong) -> prevoutScript
+            prevoutMap += OutPoint(ByteVector32(ByteVector.fromValidHex(hash).reverse), index.toLong) -> prevoutScript
           }
           case JArray(List(JString(hash), JInt(index), JString(scriptPubKey), JInt(amount))) => {
             val prevoutScript = ScriptSpec.parseFromText(scriptPubKey)
-            prevoutMap += OutPoint(fromHexString(hash).reverse, index.toLong) -> prevoutScript
-            prevamountMap += OutPoint(fromHexString(hash).reverse, index.toLong) -> Satoshi(amount.toLong)
+            prevoutMap += OutPoint(ByteVector32(ByteVector.fromValidHex(hash).reverse), index.toLong) -> prevoutScript
+            prevamountMap += OutPoint(ByteVector32(ByteVector.fromValidHex(hash).reverse), index.toLong) -> Satoshi(amount.toLong)
           }
         })
 
@@ -36,7 +37,7 @@ object TransactionSpec {
           Transaction.validate(tx)
           for (i <- 0 until tx.txIn.length if !OutPoint.isCoinbase(tx.txIn(i).outPoint)) {
             val prevOutputScript = prevoutMap(tx.txIn(i).outPoint)
-            val amount = prevamountMap.get(tx.txIn(i).outPoint).getOrElse(0 satoshi)
+            val amount = prevamountMap.get(tx.txIn(i).outPoint).getOrElse(0 sat)
             val ctx = new Script.Context(tx, i, amount)
             val runner = new Script.Runner(ctx, ScriptSpec.parseScriptFlags(verifyFlags))
             if (!runner.verifyScripts(tx.txIn(i).signatureScript, prevOutputScript, tx.txIn(i).witness)) throw new RuntimeException(s"tx ${tx.txid} does not spend its input # $i")
@@ -44,7 +45,7 @@ object TransactionSpec {
         } match {
           case Success(_) if valid => ()
           case Success(_) if !valid => throw new RuntimeException(s"$serializedTransaction should not be valid, [$comment]")
-          case Failure(t) if !valid => ()
+          case Failure(_) if !valid => ()
           case Failure(t) if valid => throw new RuntimeException(s"$serializedTransaction should be valid, [$comment]", t)
         }
       }

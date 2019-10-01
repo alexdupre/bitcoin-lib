@@ -3,10 +3,10 @@ package com.alexdupre.litecoin
 import java.io.{InputStream, OutputStream}
 import java.math.BigInteger
 import java.nio.ByteOrder
-import java.util
 
 import com.alexdupre.litecoin.Protocol._
 import org.spongycastle.crypto.generators.SCrypt
+import scodec.bits._
 
 object BlockHeader extends LtcSerializer[BlockHeader] {
   override def read(input: InputStream, protocolVersion: Long): BlockHeader = {
@@ -21,8 +21,8 @@ object BlockHeader extends LtcSerializer[BlockHeader] {
 
   override def write(input: BlockHeader, out: OutputStream, protocolVersion: Long) = {
     writeUInt32(input.version.toInt, out)
-    writeBytes(input.hashPreviousBlock, out)
-    writeBytes(input.hashMerkleRoot, out)
+    writeBytes(input.hashPreviousBlock.toArray, out)
+    writeBytes(input.hashMerkleRoot.toArray, out)
     writeUInt32(input.time.toInt, out)
     writeUInt32(input.bits.toInt, out)
     writeUInt32(input.nonce.toInt, out)
@@ -74,12 +74,12 @@ object BlockHeader extends LtcSerializer[BlockHeader] {
     if (actualTimespan > targetTimespan * 4) actualTimespan = targetTimespan * 4
 
     var (target, false, false) = decodeCompact(lastHeader.bits)
-    val powLimit = new BigInteger(1, BinaryData("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"))
+    val powLimit = new BigInteger(1, hex"00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".toArray)
     val shift = target.bitLength() > powLimit.bitLength() - 1
-    if (shift) target.shiftRight(1)
+    if (shift) target = target.shiftRight(1)
     target = target.multiply(BigInteger.valueOf(actualTimespan))
     target = target.divide(BigInteger.valueOf(targetTimespan))
-    if (shift) target.shiftLeft(1)
+    if (shift) target = target.shiftLeft(1)
 
     target = target.min(powLimit)
     encodeCompact(target)
@@ -96,19 +96,16 @@ object BlockHeader extends LtcSerializer[BlockHeader] {
   * @param bits              The calculated difficulty target being used for this block
   * @param nonce             The nonce used to generate this block… to allow variations of the header and compute different hashes
   */
-case class BlockHeader(version: Long, hashPreviousBlock: BinaryData, hashMerkleRoot: BinaryData, time: Long, bits: Long, nonce: Long) extends LtcSerializable[BlockHeader] {
-  require(hashPreviousBlock.length == 32, "hashPreviousBlock must be 32 bytes")
-  require(hashMerkleRoot.length == 32, "hashMerkleRoot must be 32 bytes")
+case class BlockHeader(version: Long, hashPreviousBlock: ByteVector32, hashMerkleRoot: ByteVector32, time: Long, bits: Long, nonce: Long) extends LtcSerializable[BlockHeader] {
+  lazy val hash: ByteVector32 = Crypto.hash256(BlockHeader.write(this))
 
-  lazy val hash: BinaryData = Crypto.hash256(BlockHeader.write(this))
-
-  lazy val powHash: BinaryData = {
+  lazy val powHash: ByteVector32 = {
     val input = serializer.write(this)
-    SCrypt.generate(input, input, 1024, 1, 1, 32).reverse
+    ByteVector32(ByteVector(SCrypt.generate(input.toArray, input.toArray, 1024, 1, 1, 32).reverse))
   }
 
   // hash is reversed here (same as tx id)
-  lazy val blockId = BinaryData(hash.reverse)
+  lazy val blockId = hash.reverse
 
   def blockProof = BlockHeader.blockProof(this)
 
@@ -118,7 +115,7 @@ case class BlockHeader(version: Long, hashPreviousBlock: BinaryData, hashMerkleR
 object Block extends LtcSerializer[Block] {
   override def read(input: InputStream, protocolVersion: Long): Block = {
     val raw = bytes(input, 80)
-    val header = BlockHeader.read(raw)
+    val header = BlockHeader.read(raw.toArray)
     Block(header, readCollection[Transaction](input, protocolVersion))
   }
 
@@ -129,7 +126,7 @@ object Block extends LtcSerializer[Block] {
 
   override def validate(input: Block): Unit = {
     BlockHeader.validate(input.header)
-    require(util.Arrays.equals(input.header.hashMerkleRoot, MerkleTree.computeRoot(input.tx.map(_.hash))), "invalid block:  merkle root mismatch")
+    require(input.header.hashMerkleRoot === MerkleTree.computeRoot(input.tx.map(_.hash)), "invalid block:  merkle root mismatch")
     require(input.tx.map(_.txid).toSet.size == input.tx.size, "invalid block: duplicate transactions")
     input.tx.foreach(Transaction.validate)
   }
@@ -138,10 +135,10 @@ object Block extends LtcSerializer[Block] {
 
   // genesis blocks
   val LivenetGenesisBlock = {
-    val script = OP_PUSHDATA(writeUInt32(486604799L)) :: OP_PUSHDATA(BinaryData("04")) :: OP_PUSHDATA("NY Times 05/Oct/2011 Steve Jobs, Apple’s Visionary, Dies at 56".getBytes("UTF-8")) :: Nil
-    val scriptPubKey = OP_PUSHDATA("040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9") :: OP_CHECKSIG :: Nil
+    val script = OP_PUSHDATA(writeUInt32(486604799L)) :: OP_PUSHDATA(hex"04") :: OP_PUSHDATA(ByteVector("NY Times 05/Oct/2011 Steve Jobs, Apple’s Visionary, Dies at 56".getBytes("UTF-8"))) :: Nil
+    val scriptPubKey = OP_PUSHDATA(hex"040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9") :: OP_CHECKSIG :: Nil
     Block(
-      BlockHeader(version = 1, hashPreviousBlock = Hash.Zeroes, hashMerkleRoot = "d9ced4ed1130f7b7faad9be25323ffafa33232a17c3edf6cfd97bee6bafbdd97", time = 1317972665, bits = 0x1e0ffff0, nonce = 2084524493),
+      BlockHeader(version = 1, hashPreviousBlock = ByteVector32.Zeroes, hashMerkleRoot = ByteVector32(hex"d9ced4ed1130f7b7faad9be25323ffafa33232a17c3edf6cfd97bee6bafbdd97"), time = 1317972665, bits = 0x1e0ffff0, nonce = 2084524493),
       List(
         Transaction(version = 1,
           txIn = List(TxIn.coinbase(script)),
@@ -169,7 +166,7 @@ object Block extends LtcSerializer[Block] {
     * @param tx coinbase transaction
     * @return the witness reserved value included in the input of this tx if any
     */
-  def witnessReservedValue(tx: Transaction): Option[BinaryData] = tx.txIn(0).witness match {
+  def witnessReservedValue(tx: Transaction): Option[ByteVector] = tx.txIn(0).witness match {
     case ScriptWitness(Seq(nonce)) if nonce.length == 32 => Some(nonce)
     case _ => None
   }
@@ -179,10 +176,10 @@ object Block extends LtcSerializer[Block] {
     * @param tx coinbase transaction
     * @return the witness commitment included in this transaction, if any
     */
-  def witnessCommitment(tx: Transaction): Option[BinaryData] = tx.txOut.map(o => Script.parse(o.publicKeyScript)).reverse.collectFirst {
+  def witnessCommitment(tx: Transaction): Option[ByteVector32] = tx.txOut.map(o => Script.parse(o.publicKeyScript)).reverse.collectFirst {
     // we've reversed the outputs because if there are more than one scriptPubKey matching the pattern, the one with
     // the highest output index is assumed to be the commitment.
-    case OP_RETURN :: OP_PUSHDATA(commitmentHeader, _) :: Nil if commitmentHeader.length == 36 && Protocol.uint32(commitmentHeader.take(4), ByteOrder.BIG_ENDIAN) == 0xaa21a9edL => commitmentHeader.takeRight(32)
+    case OP_RETURN :: OP_PUSHDATA(commitmentHeader, _) :: Nil if commitmentHeader.length == 36 && Protocol.uint32(commitmentHeader.take(4).toArray, ByteOrder.BIG_ENDIAN) == 0xaa21a9edL => ByteVector32(commitmentHeader.takeRight(32))
   }
 
   /**
@@ -196,7 +193,7 @@ object Block extends LtcSerializer[Block] {
     val coinbase = block.tx.head
     (witnessReservedValue(coinbase), witnessCommitment(coinbase)) match {
       case (Some(nonce), Some(commitment)) =>
-        val rootHash = MerkleTree.computeRoot(Hash.Zeroes +: block.tx.tail.map(_.whash))
+        val rootHash = MerkleTree.computeRoot(ByteVector32.Zeroes +: block.tx.tail.map(tx => tx.whash))
         val commitmentHash = Crypto.hash256(rootHash ++ nonce)
         commitment == commitmentHash
       case _ if block.tx.exists(_.hasWitness) => false // block has segwit transactions but no witness commitment

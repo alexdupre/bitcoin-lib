@@ -3,11 +3,12 @@ package com.alexdupre.litecoin.reference
 import java.io.InputStreamReader
 
 import com.alexdupre.litecoin.Crypto.PrivateKey
-import com.alexdupre.litecoin.{Base58, Base58Check, Bech32, BinaryData, OP_CHECKSIG, OP_DUP, OP_EQUAL, OP_EQUALVERIFY, OP_HASH160, OP_PUSHDATA, Script}
+import com.alexdupre.litecoin.{Base58, Base58Check, Bech32, OP_CHECKSIG, OP_DUP, OP_EQUAL, OP_EQUALVERIFY, OP_HASH160, OP_PUSHDATA, Script}
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST.{JBool, JString, JValue}
 import org.json4s.jackson.JsonMethods
 import org.scalatest.FunSuite
+import scodec.bits.ByteVector
 
 import scala.util.Try
 
@@ -22,6 +23,8 @@ class KeyEncodingSpec extends FunSuite {
   }
 
   test("invalid keys") {
+    val result = KeyEncodingSpec.isValidBase58("KxuACDviz8Xvpn1xAh9MfopySZNuyajYMZWz16Dv2mHHryznWUp3")
+
     val stream = classOf[KeyEncodingSpec].getResourceAsStream("/data/base58_keys_invalid.json")
     val json = JsonMethods.parse(new InputStreamReader(stream))
 
@@ -40,7 +43,7 @@ object KeyEncodingSpec {
   def isValidBase58(input: String): Boolean = Try {
     val (prefix, bin) = Base58Check.decode(input)
     prefix match {
-      case Base58.Prefix.SecretKey | Base58.Prefix.SecretKeyTestnet => Try(PrivateKey(bin)).isSuccess
+      case Base58.Prefix.SecretKey | Base58.Prefix.SecretKeyTestnet => Try(PrivateKey.fromBin(bin)).isSuccess
       case Base58.Prefix.PubkeyAddress | Base58.Prefix.PubkeyAddressTestnet => bin.length == 20
       case _ => false
     }
@@ -56,6 +59,7 @@ object KeyEncodingSpec {
   def check(data: List[JValue]): Unit = {
     data match {
       case JString(encoded) :: JString(hex) :: obj :: Nil => {
+        val bin = ByteVector.fromValidHex(hex)
         val JBool(isPrivkey) = obj \ "isPrivkey"
         val isCompressed = obj \ "isCompressed" match {
           case JBool(value) => value
@@ -65,21 +69,21 @@ object KeyEncodingSpec {
         if (isPrivkey) {
           val (version, data) = Base58Check.decode(encoded)
           assert(version == Base58.Prefix.SecretKey || version == Base58.Prefix.SecretKeyTestnet)
-          assert(BinaryData(data.take(32)) == BinaryData(hex))
+          assert(data.take(32) == bin)
         } else encoded.head match {
           case 'L' | 'm' | 'n' =>
             val (version, data) = Base58Check.decode(encoded)
             assert(version == Base58.Prefix.PubkeyAddress || version == Base58.Prefix.PubkeyAddressTestnet)
-            val OP_DUP :: OP_HASH160 :: OP_PUSHDATA(hash, _) :: OP_EQUALVERIFY :: OP_CHECKSIG :: Nil = Script.parse(hex)
+            val OP_DUP :: OP_HASH160 :: OP_PUSHDATA(hash, _) :: OP_EQUALVERIFY :: OP_CHECKSIG :: Nil = Script.parse(bin)
             assert(data == hash)
           case 'M' | 'Q' =>
             val (version, data) = Base58Check.decode(encoded)
             assert(version == Base58.Prefix.ScriptAddress2 || version == Base58.Prefix.ScriptAddress2Testnet)
-            val OP_HASH160 :: OP_PUSHDATA(hash, _) :: OP_EQUAL :: Nil = Script.parse(hex)
+            val OP_HASH160 :: OP_PUSHDATA(hash, _) :: OP_EQUAL :: Nil = Script.parse(bin)
             assert(data == hash)
           case 'l' | 'r' | 't' =>
             val (_, tag, program) = Bech32.decodeWitnessAddress(encoded)
-            val op :: OP_PUSHDATA(hash, _) :: Nil = Script.parse(hex)
+            val op :: OP_PUSHDATA(hash, _) :: Nil = Script.parse(bin)
             assert(Script.simpleValue(op) == tag)
             assert(program == hash)
         }

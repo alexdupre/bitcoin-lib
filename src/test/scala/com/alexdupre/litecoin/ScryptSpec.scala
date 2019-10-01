@@ -1,6 +1,7 @@
 package com.alexdupre.litecoin
 
 import org.scalatest.FlatSpec
+import scodec.bits.ByteVector
 
 class ScryptSpec extends FlatSpec {
 
@@ -23,7 +24,7 @@ class ScryptSpec extends FlatSpec {
     (inputs zip outputs).foreach {
       case (header, powHash) =>
         val computedPowHash = BlockHeader.read(header).powHash
-        assert(computedPowHash === BinaryData(powHash))
+        assert(computedPowHash === ByteVector32(ByteVector.fromValidHex(powHash)))
     }
 
   }

@@ -5,22 +5,23 @@ import java.io.ByteArrayOutputStream
 import com.alexdupre.litecoin.Crypto._
 import com.alexdupre.litecoin.Protocol._
 import org.scalatest.{FunSuite, Matchers}
+import scodec.bits._
 
 class TransactionSpec extends FunSuite with Matchers {
   test("create and sign transaction") {
-    val srcTx = fromHexString("dcd82df7b26f0eacd226b8fbd366672c854284ba8080f79e1307138c7f1a1f6d".sliding(2, 2).toList.reverse.mkString(""))
+    val srcTx = ByteVector.fromValidHex("dcd82df7b26f0eacd226b8fbd366672c854284ba8080f79e1307138c7f1a1f6d").reverse.toArray
     // for some reason it has to be reversed
     val amount = 9000000
     // amount) satoshi
     val vout = 0
     // output)dex
-    val destAdress = fromHexString("76a914c622640075eaeda95a5ac26fa05a0b894a3def8c88ac")
+    val destAdress = ByteVector.fromValidHex("76a914c622640075eaeda95a5ac26fa05a0b894a3def8c88ac").toArray
     val out = new ByteArrayOutputStream()
     writeUInt32(1, out) //version
     writeVarint(1, out) // nb of)puts
     out.write(srcTx) // tx) id
     writeUInt32(vout, out)
-    writeScript(fromHexString("76a914ea2902457015b386bd2323b2b99591b96138d62a88ac"), out) //scriptPubKey of prev tx for signing
+    writeScript(ByteVector.fromValidHex("76a914ea2902457015b386bd2323b2b99591b96138d62a88ac").toArray, out) //scriptPubKey of prev tx for signing
     writeUInt32(0xffffffff, out) // sequence
     writeVarint(1, out) // number of outputs
     writeUInt64(amount, out)
@@ -28,21 +29,19 @@ class TransactionSpec extends FunSuite with Matchers {
     writeUInt32(0, out)
     writeUInt32(1, out)
     // hash code type
-    val serialized = out.toByteArray
+    val serialized = ByteVector.view(out.toByteArray)
     val hashed = Crypto.hash256(serialized)
-    val pkey_encoded = Base58.decode("92f9274aR3s6zd1vuAgxquv4KP5S5thJadF3k54NHuTV4fXL1vW")
-    val pkey = PrivateKey(pkey_encoded.slice(1, pkey_encoded.size - 4))
-    val (r, s) = Crypto.sign(hashed, pkey)
-    val sig = Crypto.encodeSignature(r, s)
+    val pkey = PrivateKey.fromBase58("92f9274aR3s6zd1vuAgxquv4KP5S5thJadF3k54NHuTV4fXL1vW", Base58.Prefix.SecretKeyTestnet)._1
+    val sig = Crypto.compact2der(Crypto.sign(hashed, pkey))
     // DER encoded
     val sigOut = new ByteArrayOutputStream()
-    writeUInt8(sig.length + 1, sigOut) // +1 because of the hash code
+    writeUInt8(sig.length.toInt + 1, sigOut) // +1 because of the hash code
     sigOut.write(sig.toArray)
     writeUInt8(1, sigOut)
     // hash code type
-    val pub = pkey.publicKey
-    writeUInt8(pub.length, sigOut)
-    sigOut.write(pub.toBin)
+    val pub = pkey.publicKey.toUncompressedBin
+    writeUInt8(pub.length.toInt, sigOut)
+    sigOut.write(pub.toArray)
     val sigScript = sigOut.toByteArray
 
     val signedOut = new ByteArrayOutputStream()
@@ -56,17 +55,18 @@ class TransactionSpec extends FunSuite with Matchers {
     writeUInt64(amount, signedOut) // amount) satoshi
     writeScript(destAdress, signedOut) //output script
     writeUInt32(0, signedOut)
-    assert(toHexString(signedOut.toByteArray) === "01000000016d1f1a7f8c1307139ef78080ba8442852c6766d3fbb826d2ac0e6fb2f72dd8dc000000008b483045022100bdd23d0f98a4173a64fa432b8bf4ac41261a671f2c6c690d57ac839866d78bb202207bddb87ca95c9cef45de30a75144e5513571aa7938635b9e051b1c20f01088a60141044aec194c55c97f4519535f50f5539c6915045ecb79a36281dee6db55ffe1ad2e55f4a1c0e0950d3511e8f205b45cafa348a4a2ab2359246cb3c93f6532c4e8f5ffffffff0140548900000000001976a914c622640075eaeda95a5ac26fa05a0b894a3def8c88ac00000000")
+    val res = ByteVector.view(signedOut.toByteArray)
+    assert(res === hex"01000000016d1f1a7f8c1307139ef78080ba8442852c6766d3fbb826d2ac0e6fb2f72dd8dc000000008b483045022100bdd23d0f98a4173a64fa432b8bf4ac41261a671f2c6c690d57ac839866d78bb202207bddb87ca95c9cef45de30a75144e5513571aa7938635b9e051b1c20f01088a60141044aec194c55c97f4519535f50f5539c6915045ecb79a36281dee6db55ffe1ad2e55f4a1c0e0950d3511e8f205b45cafa348a4a2ab2359246cb3c93f6532c4e8f5ffffffff0140548900000000001976a914c622640075eaeda95a5ac26fa05a0b894a3def8c88ac00000000")
   }
   test("read and write transactions") {
-    val hex = BinaryData("0100000003864d5e5ec82c9e6f4ac52b8fa47b77f8616bbc26fcf668432c097c5add169584010000006a47304402203be0cff1faacadce3b02d615a8ac15532f9a90bd30e109eaa3e01bfa3a97d90b0220355f3bc382e35b9cae24e5d674f200b289bb948675ce1b5c931029ccb23ae836012102fd18c2a069488288ae93c2157dff3fd657a39426e8753512a5547f046b4a2cbbffffffffd587b10688e6d56225dd4dc488b74229a353e4613cbe1deadaef52b56616baa9000000008b483045022100ab98145e8526b32e821beeaed41a98da68c3c75ee13c477ee0e3d66a626217e902204d015af2e7dba834bbe421dd0b1353a1060dafee58c284dd763e07639858f9340141043ca81d9fe7996372eb21b2588af07c7fbdb6d4fc1da13aaf953c520ba1da4f87d53dfcba3525369fdb248e60233fdf6df0a8183a6dd5699c9a6f5c537367c627ffffffff94a162b4aab080a09fa982a5d7f586045ba2a4c653c98ff47b952d43c25b45fd000000008a47304402200e0c0223d169282a48731b58ff0673c00205deb3f3f4f28d99b50730ada1571402202fa9f051762d8e0199791ea135df1f393578c1eea530bec00fa16f6bba7e3aa3014104626f9b06c44bcfd5d2f6bdeab456591287e2d2b2e299815edf0c9fd0f23c21364ed5dbe97c9c6e2be40fff40c31f8561a9dee015146fe59ecf68b8a377292c72ffffffff02c0c62d00000000001976a914e410e8bc694e8a39c32a273eb1d71930f63648fe88acc0cf6a00000000001976a914324505870d6f21dca7d2f90642cd9603553f6fa688ac00000000")
-    val tx = Transaction.read(hex)
+    val hex = hex"0100000003864d5e5ec82c9e6f4ac52b8fa47b77f8616bbc26fcf668432c097c5add169584010000006a47304402203be0cff1faacadce3b02d615a8ac15532f9a90bd30e109eaa3e01bfa3a97d90b0220355f3bc382e35b9cae24e5d674f200b289bb948675ce1b5c931029ccb23ae836012102fd18c2a069488288ae93c2157dff3fd657a39426e8753512a5547f046b4a2cbbffffffffd587b10688e6d56225dd4dc488b74229a353e4613cbe1deadaef52b56616baa9000000008b483045022100ab98145e8526b32e821beeaed41a98da68c3c75ee13c477ee0e3d66a626217e902204d015af2e7dba834bbe421dd0b1353a1060dafee58c284dd763e07639858f9340141043ca81d9fe7996372eb21b2588af07c7fbdb6d4fc1da13aaf953c520ba1da4f87d53dfcba3525369fdb248e60233fdf6df0a8183a6dd5699c9a6f5c537367c627ffffffff94a162b4aab080a09fa982a5d7f586045ba2a4c653c98ff47b952d43c25b45fd000000008a47304402200e0c0223d169282a48731b58ff0673c00205deb3f3f4f28d99b50730ada1571402202fa9f051762d8e0199791ea135df1f393578c1eea530bec00fa16f6bba7e3aa3014104626f9b06c44bcfd5d2f6bdeab456591287e2d2b2e299815edf0c9fd0f23c21364ed5dbe97c9c6e2be40fff40c31f8561a9dee015146fe59ecf68b8a377292c72ffffffff02c0c62d00000000001976a914e410e8bc694e8a39c32a273eb1d71930f63648fe88acc0cf6a00000000001976a914324505870d6f21dca7d2f90642cd9603553f6fa688ac00000000"
+    val tx = Transaction.read(hex.toArray)
     assert(tx.bin === hex)
   }
   test("create and verify pay2pk transactions with 1)put/1 output") {
     val to = "mi1cMMSL9BZwTQZYpweE1nTmwRxScirPp3"
-    val amount = 10000 satoshi
-    val privateKey = PrivateKey.fromBase58("cRp4uUnreGMZN8vB7nQFX6XWMHU5Lc73HMAhmcDEwHfbgRS66Cqp", Base58.Prefix.SecretKeyTestnet)
+    val amount = 10000 sat
+    val privateKey = PrivateKey.fromBase58("cRp4uUnreGMZN8vB7nQFX6XWMHU5Lc73HMAhmcDEwHfbgRS66Cqp", Base58.Prefix.SecretKeyTestnet)._1
 
     val previousTx = Transaction.read("0100000001b021a77dcaad3a2da6f1611d2403e1298a902af8567c25d6e65073f6b52ef12d000000006a473044022056156e9f0ad7506621bc1eb963f5133d06d7259e27b13fcb2803f39c7787a81c022056325330585e4be39bcf63af8090a2deff265bc29a3fb9b4bf7a31426d9798150121022dfb538041f111bb16402aa83bd6a3771fa8aa0e5e9b0b549674857fafaf4fe0ffffffff0210270000000000001976a91415c23e7f4f919e9ff554ec585cb2a67df952397488ac3c9d1000000000001976a9148982824e057ccc8d4591982df71aa9220236a63888ac00000000")
     // create a transaction where the sig script is the pubkey script of the tx we want to redeem
@@ -97,8 +97,7 @@ class TransactionSpec extends FunSuite with Matchers {
     val hashed = Crypto.hash256(serializedTx1AndHashType)
 
     // step #4: sign transaction hash
-    val (r, s) = Crypto.sign(hashed, privateKey)
-    val sig = Crypto.encodeSignature(r, s) // DER encoded
+    val sig = Crypto.compact2der(Crypto.sign(hashed, privateKey)) // DER encoded
 
     // this is the public key that is associated to the private key we used for signing
     val publicKey = privateKey.publicKey
@@ -117,7 +116,7 @@ class TransactionSpec extends FunSuite with Matchers {
     ))
 
     // check signature
-    assert(Crypto.verifySignature(hashed, sig, publicKey))
+    assert(Crypto.verifySignature(hashed, Crypto.der2compact(sig), publicKey))
 
     // check script
     Transaction.correctlySpends(tx2, Seq(previousTx), ScriptFlags.MANDATORY_SCRIPT_VERIFY_FLAGS)
@@ -126,9 +125,9 @@ class TransactionSpec extends FunSuite with Matchers {
   test("create and verify pay2pk transactions with 1)put/1 output using helper method") {
     val to = "mi1cMMSL9BZwTQZYpweE1nTmwRxScirPp3"
     val (Base58.Prefix.PubkeyAddressTestnet, pubkeyHash) = Base58Check.decode(to)
-    val amount = 10000 satoshi
+    val amount = 10000 sat
 
-    val privateKey = PrivateKey.fromBase58("cRp4uUnreGMZN8vB7nQFX6XWMHU5Lc73HMAhmcDEwHfbgRS66Cqp", Base58.Prefix.SecretKeyTestnet)
+    val privateKey = PrivateKey.fromBase58("cRp4uUnreGMZN8vB7nQFX6XWMHU5Lc73HMAhmcDEwHfbgRS66Cqp", Base58.Prefix.SecretKeyTestnet)._1
     val publicKey = privateKey.publicKey
 
     val previousTx = Transaction.read("0100000001b021a77dcaad3a2da6f1611d2403e1298a902af8567c25d6e65073f6b52ef12d000000006a473044022056156e9f0ad7506621bc1eb963f5133d06d7259e27b13fcb2803f39c7787a81c022056325330585e4be39bcf63af8090a2deff265bc29a3fb9b4bf7a31426d9798150121022dfb538041f111bb16402aa83bd6a3771fa8aa0e5e9b0b549674857fafaf4fe0ffffffff0210270000000000001976a91415c23e7f4f919e9ff554ec585cb2a67df952397488ac3c9d1000000000001976a9148982824e057ccc8d4591982df71aa9220236a63888ac00000000")
@@ -150,7 +149,7 @@ class TransactionSpec extends FunSuite with Matchers {
     )
 
     // step #2: sign the tx
-    val sig = Transaction.signInput(tx1, 0, previousTx.txOut(0).publicKeyScript, SIGHASH_ALL, 0 satoshi, SigVersion.SIGVERSION_BASE, privateKey)
+    val sig = Transaction.signInput(tx1, 0, previousTx.txOut(0).publicKeyScript, SIGHASH_ALL, 0 sat, SigVersion.SIGVERSION_BASE, privateKey)
     val tx2 = tx1.updateSigScript(0, OP_PUSHDATA(sig) :: OP_PUSHDATA(publicKey) :: Nil)
 
     // redeem the tx
@@ -158,10 +157,10 @@ class TransactionSpec extends FunSuite with Matchers {
   }
   test("create and verify sign pay2pk transactions with multiple)puts and outputs") {
     val destAddress = "moKHwpsxovDtfBJyoXpof21vvWooBExutV"
-    val destAmount = 3000000 satoshi
+    val destAmount = 3000000 sat
 
     val changeAddress = "mvHPesWqLXXy7hntNa7vbAoVwqN5PnrwJd"
-    val changeAmount = 1700000 satoshi
+    val changeAmount = 1700000 sat
 
     val previousTx = List(
       Transaction.read("0100000001bb4f5a244b29dc733c56f80c0fed7dd395367d9d3b416c01767c5123ef124f82000000006b4830450221009e6ed264343e43dfee2373b925915f7a4468e0bc68216606e40064561e6c097a022030f2a50546a908579d0fab539d5726a1f83cfd48d29b89ab078d649a8e2131a0012103c80b6c289bf0421d010485cec5f02636d18fb4ed0f33bfa6412e20918ebd7a34ffffffff0200093d00000000001976a9145dbf52b8d7af4fb5f9b75b808f0a8284493531b388acf0b0b805000000001976a914807c74c89592e8a260f04b5a3bc63e7bef8c282588ac00000000"),
@@ -169,14 +168,14 @@ class TransactionSpec extends FunSuite with Matchers {
     )
 
     val keys = List(
-      SignData(previousTx(0).txOut(0).publicKeyScript, PrivateKey.fromBase58("cV7LGVeY2VPuCyCSarqEqFCUNig2NzwiAEBTTA89vNRQ4Vqjfurs", Base58.Prefix.SecretKeyTestnet)),
-      SignData(previousTx(1).txOut(0).publicKeyScript, PrivateKey.fromBase58("93NJN4mhL21FxRbfHZJ2Cou1YnrJmWNkujmZxeT7CPKauJkGv5g", Base58.Prefix.SecretKeyTestnet))
+      PrivateKey.fromBase58("cV7LGVeY2VPuCyCSarqEqFCUNig2NzwiAEBTTA89vNRQ4Vqjfurs", Base58.Prefix.SecretKeyTestnet)._1,
+      PrivateKey.fromBase58("93NJN4mhL21FxRbfHZJ2Cou1YnrJmWNkujmZxeT7CPKauJkGv5g", Base58.Prefix.SecretKeyTestnet)._1
     )
 
     // create a tx with empty)put signature scripts
     val tx = Transaction(
       version = 1L,
-      txIn = previousTx.map(tx => TxIn(OutPoint(tx, 0), sequence = 0xFFFFFFFFL, signatureScript = Array.empty[Byte])),
+      txIn = previousTx.map(tx => TxIn(OutPoint(tx, 0), sequence = 0xFFFFFFFFL, signatureScript = ByteVector.empty)),
       txOut = List(
         TxOut(
           amount = destAmount,
@@ -187,7 +186,12 @@ class TransactionSpec extends FunSuite with Matchers {
       lockTime = 0L
     )
 
-    val tx1 = Transaction.sign(tx, keys)
+    val sig1 = Transaction.signInput(tx, 0, previousTx(0).txOut(0).publicKeyScript, SIGHASH_ALL, 0 sat, SigVersion.SIGVERSION_BASE, keys(0))
+    val sig2 = Transaction.signInput(tx, 1, previousTx(1).txOut(0).publicKeyScript, SIGHASH_ALL, 0 sat, SigVersion.SIGVERSION_BASE, keys(1))
+    val tx1 = tx
+      .updateSigScript(0, OP_PUSHDATA(sig1) :: OP_PUSHDATA(keys(0).publicKey.value) :: Nil)
+      .updateSigScript(1, OP_PUSHDATA(sig2) :: OP_PUSHDATA(keys(1).publicKey.toUncompressedBin) :: Nil)
+
     assert(tx1.toString == "01000000026c8a0bb4fef409509800066578a718e9a771082d94e96e0885a4b6a15b720c02000000006b483045022100e5510a2f15f03788ee2aeb2115edc96089596e3a0f0c1b1abfbbf069f4beedb802203faf6ec92a5a4ed2ce5fd42621be99746b57eca0eb46d322dc076080338b6c5a0121030533e1d2e9b7576fef26de1f34d67887158b7af1b040850aab6024b07925d70affffffffaf01f14881716b8acb062c33e7a66fc71e77bb2e4359b1f91b959aeb4f8837f1000000008b483045022100d3e5756f36e39a801c71c406124b3e0a66f0893a7fea46c69939b84715137c40022070a0e96e37c0a8e8c920e84fc63ed1914b4cef114a027f2d027d0a4a04b0b52d0141040081a4cce4c497d51d2f9be2d2109c00cbdef252185ca23074889604ace3504d73fd5f5aaac6423b04e776e467a948e1e79cb8793ded5f4b59c730c4460a0f86ffffffff02c0c62d00000000001976a914558c6b340f5abd22bf97b15cbc1483f8f1b54f5f88aca0f01900000000001976a914a1f93b5b00f9f5e8ade5549b58ed06cdc5c8203e88ac00000000")
 
     // now check that we can redeem this tx
@@ -197,16 +201,16 @@ class TransactionSpec extends FunSuite with Matchers {
 
   test("create and sign p2sh transactions") {
 
-    val key1 = PrivateKey(BinaryData("C0B91A94A26DC9BE07374C2280E43B1DE54BE568B2509EF3CE1ADE5C9CF9E8AA01"))
+    val key1 = PrivateKey(hex"C0B91A94A26DC9BE07374C2280E43B1DE54BE568B2509EF3CE1ADE5C9CF9E8AA01")
     val pub1 = key1.publicKey
-    val key2 = PrivateKey(BinaryData("5C3D081615591ABCE914D231BA009D8AE0174759E4A9AE821D97E28F122E2F8C01"))
+    val key2 = PrivateKey(hex"5C3D081615591ABCE914D231BA009D8AE0174759E4A9AE821D97E28F122E2F8C01")
     val pub2 = key2.publicKey
-    val key3 = PrivateKey(BinaryData("29322B8277C344606BA1830D223D5ED09B9E1385ED26BE4AD14075F054283D8C01"))
+    val key3 = PrivateKey(hex"29322B8277C344606BA1830D223D5ED09B9E1385ED26BE4AD14075F054283D8C01")
     val pub3 = key3.publicKey
 
     // we want to spend the first output of this tx
     val previousTx = Transaction.read("01000000014100d6a4d20ff14dfffd772aa3610881d66332ed160fc1094a338490513b0cf800000000fc0047304402201182201b586c6bfe6fd0346382900834149674d3cbb4081c304965440b1c0af20220023b62a997f4385e9279dc1078590556c6c6a85c3ec20fda407e95eb270e4de90147304402200c75f91f8bd741a8e71d11ff6a3e931838e32ceead34ccccfe3f73f01a81e45f02201795881473644b5f5ee6a8d8a90fe16e60eacace40e88900c375af2e0c51e26d014c69522103bd95bfc136869e2e5e3b0491e45c32634b0201a03903e210b01be248e04df8702103e04f714a4010ca5bb1423ef97012cb1008fb0dfd2f02acbcd3650771c46e4a8f2102913bd21425454688bdc2df2f0e518c5f3109b1c1be56e6e783a41c394c95dc0953aeffffffff0140420f00000000001976a914298e5c1e2d2cf22deffd2885394376c7712f9c6088ac00000000")
-    val privateKey = PrivateKey.fromBase58("92TgRLMLLdwJjT1JrrmTTWEpZ8uG7zpHEgSVPTbwfAs27RpdeWM", Base58.Prefix.SecretKeyTestnet)
+    val privateKey = PrivateKey.fromBase58("92TgRLMLLdwJjT1JrrmTTWEpZ8uG7zpHEgSVPTbwfAs27RpdeWM", Base58.Prefix.SecretKeyTestnet)._1
     val publicKey = privateKey.publicKey
 
     // create and serialize a "2 out of 3" multisig script
@@ -224,26 +228,26 @@ class TransactionSpec extends FunSuite with Matchers {
       version = 1L,
       txIn = TxIn(OutPoint(previousTx.hash, 0), signatureScript = Nil, sequence = 0xFFFFFFFFL) :: Nil,
       txOut = TxOut(
-        amount = 900000 satoshi, // 0.009 LTC) satoshi, meaning the fee will be 0.01-0.009 = 0.001
+        amount = 900000 sat, // 0.009 LTC) satoshi, meaning the fee will be 0.01-0.009 = 0.001
         publicKeyScript = OP_HASH160 :: OP_PUSHDATA(multisigAddress) :: OP_EQUAL :: Nil) :: Nil,
       lockTime = 0L)
 
     // and sign it
-    val sig = Transaction.signInput(tx, 0, previousTx.txOut(0).publicKeyScript, SIGHASH_ALL, 0 satoshi, SigVersion.SIGVERSION_BASE, privateKey)
-    val signedTx = tx.updateSigScript(0, OP_PUSHDATA(sig) :: OP_PUSHDATA(privateKey.publicKey) :: Nil)
+    val sig = Transaction.signInput(tx, 0, previousTx.txOut(0).publicKeyScript, SIGHASH_ALL, 0 sat, SigVersion.SIGVERSION_BASE, privateKey)
+    val signedTx = tx.updateSigScript(0, OP_PUSHDATA(sig) :: OP_PUSHDATA(privateKey.publicKey.toUncompressedBin) :: Nil)
     Transaction.correctlySpends(signedTx, previousTx :: Nil, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
 
     // how to spend our tx ? let's try to sent its output to our public key
     val spendingTx = Transaction(version = 1L,
-      txIn = TxIn(OutPoint(signedTx.hash, 0), signatureScript = Array.emptyByteArray, sequence = 0xFFFFFFFFL) :: Nil,
+      txIn = TxIn(OutPoint(signedTx.hash, 0), signatureScript = ByteVector.empty, sequence = 0xFFFFFFFFL) :: Nil,
       txOut = TxOut(
-        amount = 900000 satoshi,
-        publicKeyScript = OP_DUP :: OP_HASH160 :: OP_PUSHDATA(Crypto.hash160(publicKey.toBin)) :: OP_EQUALVERIFY :: OP_CHECKSIG :: Nil) :: Nil,
+        amount = 900000 sat,
+        publicKeyScript = OP_DUP :: OP_HASH160 :: OP_PUSHDATA(Crypto.hash160(publicKey.value)) :: OP_EQUALVERIFY :: OP_CHECKSIG :: Nil) :: Nil,
       lockTime = 0L)
 
     // we need at least 2 signatures
-    val sig1 = Transaction.signInput(spendingTx, 0, redeemScript, SIGHASH_ALL, 0 satoshi, SigVersion.SIGVERSION_BASE, key1)
-    val sig2 = Transaction.signInput(spendingTx, 0, redeemScript, SIGHASH_ALL, 0 satoshi, SigVersion.SIGVERSION_BASE, key2)
+    val sig1 = Transaction.signInput(spendingTx, 0, redeemScript, SIGHASH_ALL, 0 sat, SigVersion.SIGVERSION_BASE, key1)
+    val sig2 = Transaction.signInput(spendingTx, 0, redeemScript, SIGHASH_ALL, 0 sat, SigVersion.SIGVERSION_BASE, key2)
 
     // update our tx with the correct sig script
     val sigScript = OP_0 :: OP_PUSHDATA(sig1) :: OP_PUSHDATA(sig2) :: OP_PUSHDATA(redeemScript) :: Nil
@@ -258,10 +262,11 @@ class TransactionSpec extends FunSuite with Matchers {
       Transaction.read("0100000001cec6dd9f7ddc640f7bb54daf5623040532b8783472df1de3adc70df9b0f04f05010000006b483045022100d6fb138dca5e6cce925a4bcc322d02ab194f68a0c2794bb1a555dc1ff8c2465f02205a4977af8f398b013da33e61a35f83578c3a9cccea3328b6c982ff4dc8092c7e01210224fc92517bc13b1e9f609054afc2539f2f121f4c1e45fb46fac21364c42440c6ffffffff01400d0300000000001976a9146a3e65bf746bcd7af3493e19451451a8a4da331588ac00000000"),
       Transaction.read("01000000016d1f1a7f8c1307139ef78080ba8442852c6766d3fbb826d2ac0e6fb2f72dd8dc000000008b483045022100bdd23d0f98a4173a64fa432b8bf4ac41261a671f2c6c690d57ac839866d78bb202207bddb87ca95c9cef45de30a75144e5513571aa7938635b9e051b1c20f01088a60141044aec194c55c97f4519535f50f5539c6915045ecb79a36281dee6db55ffe1ad2e55f4a1c0e0950d3511e8f205b45cafa348a4a2ab2359246cb3c93f6532c4e8f5ffffffff0140548900000000001976a914c622640075eaeda95a5ac26fa05a0b894a3def8c88ac00000000")
     )
+
     val keys = List(
-      SignData(previousTx(0).txOut(1).publicKeyScript, PrivateKey.fromBase58("cW6bSKtH3oMPA18cXSMR8ASHztrmbwmCyqvvN8x3Tc7WG6TyrJDg", Base58.Prefix.SecretKeyTestnet)),
-      SignData(previousTx(1).txOut(0).publicKeyScript, PrivateKey.fromBase58("93Ag8t83NW9WmPbhqLCSUNckARpbpgWtp4EWGidtj6h6pVQgGN4", Base58.Prefix.SecretKeyTestnet)),
-      SignData(previousTx(2).txOut(0).publicKeyScript, PrivateKey.fromBase58("921vnTeSQCN7GMHdiHyaoZ1JSugTtzvg8rqyXH9HmFtBgrNDxCT", Base58.Prefix.SecretKeyTestnet))
+      PrivateKey.fromBase58("cW6bSKtH3oMPA18cXSMR8ASHztrmbwmCyqvvN8x3Tc7WG6TyrJDg", Base58.Prefix.SecretKeyTestnet)._1,
+      PrivateKey.fromBase58("93Ag8t83NW9WmPbhqLCSUNckARpbpgWtp4EWGidtj6h6pVQgGN4", Base58.Prefix.SecretKeyTestnet)._1,
+      PrivateKey.fromBase58("921vnTeSQCN7GMHdiHyaoZ1JSugTtzvg8rqyXH9HmFtBgrNDxCT", Base58.Prefix.SecretKeyTestnet)._1
     )
 
     val dest1 = "n2Jrcf7cJH7wMJdhKZGVi2jaSnV2BwYE9m"
@@ -269,16 +274,16 @@ class TransactionSpec extends FunSuite with Matchers {
     val dest2 = "mk6kmMF5EEXksBkZxi7FniwwRgWuZuwDpo"
     //priv: 91r7coHBdzfgfm2p3ToJ3Bu6kcqL3BvSo5m4ENzMZzsimRKH8aq
     // 0.03 and 0.07 LTC) satoshi, meaning the fee will be (0.01+0.002+0.09)-(0.03+0.07) = 0.002
-    val amount1 = 3000000 satoshi
-    val amount2 = 7000000 satoshi
+    val amount1 = 3000000 sat
+    val amount2 = 7000000 sat
 
     // create a tx with empty)put signature scripts
     val tx = Transaction(
       version = 1L,
       txIn = List(
-        TxIn(OutPoint(previousTx(0), 1), Array.empty[Byte], 0xffffffffL),
-        TxIn(OutPoint(previousTx(1), 0), Array.empty[Byte], 0xffffffffL),
-        TxIn(OutPoint(previousTx(2), 0), Array.empty[Byte], 0xffffffffL)
+        TxIn(OutPoint(previousTx(0), 1), ByteVector.empty, 0xffffffffL),
+        TxIn(OutPoint(previousTx(1), 0), ByteVector.empty, 0xffffffffL),
+        TxIn(OutPoint(previousTx(2), 0), ByteVector.empty, 0xffffffffL)
       ),
       txOut = List(TxOut(
         amount = amount1,
@@ -289,7 +294,14 @@ class TransactionSpec extends FunSuite with Matchers {
       lockTime = 0L
     )
 
-    val signedTx = Transaction.sign(tx, keys)
+    val sig1 = Transaction.signInput(tx, 0, previousTx(0).txOut(1).publicKeyScript, SIGHASH_ALL, 0 sat, SigVersion.SIGVERSION_BASE, keys(0))
+    val sig2 = Transaction.signInput(tx, 1, previousTx(1).txOut(0).publicKeyScript, SIGHASH_ALL, 0 sat, SigVersion.SIGVERSION_BASE, keys(1))
+    val sig3 = Transaction.signInput(tx, 2, previousTx(2).txOut(0).publicKeyScript, SIGHASH_ALL, 0 sat, SigVersion.SIGVERSION_BASE, keys(2))
+
+    val signedTx = tx
+      .updateSigScript(0, OP_PUSHDATA(sig1) :: OP_PUSHDATA(keys(0).publicKey.value) :: Nil)
+      .updateSigScript(1, OP_PUSHDATA(sig2) :: OP_PUSHDATA(keys(1).publicKey.toUncompressedBin) :: Nil)
+      .updateSigScript(2, OP_PUSHDATA(sig3) :: OP_PUSHDATA(keys(2).publicKey.toUncompressedBin) :: Nil)
 
     //this works because signature is not randomized
     assert(signedTx.toString == "0100000003864d5e5ec82c9e6f4ac52b8fa47b77f8616bbc26fcf668432c097c5add169584010000006a47304402203be0cff1faacadce3b02d615a8ac15532f9a90bd30e109eaa3e01bfa3a97d90b0220355f3bc382e35b9cae24e5d674f200b289bb948675ce1b5c931029ccb23ae836012102fd18c2a069488288ae93c2157dff3fd657a39426e8753512a5547f046b4a2cbbffffffffd587b10688e6d56225dd4dc488b74229a353e4613cbe1deadaef52b56616baa9000000008b483045022100ab98145e8526b32e821beeaed41a98da68c3c75ee13c477ee0e3d66a626217e902204d015af2e7dba834bbe421dd0b1353a1060dafee58c284dd763e07639858f9340141043ca81d9fe7996372eb21b2588af07c7fbdb6d4fc1da13aaf953c520ba1da4f87d53dfcba3525369fdb248e60233fdf6df0a8183a6dd5699c9a6f5c537367c627ffffffff94a162b4aab080a09fa982a5d7f586045ba2a4c653c98ff47b952d43c25b45fd000000008a47304402200e0c0223d169282a48731b58ff0673c00205deb3f3f4f28d99b50730ada1571402202fa9f051762d8e0199791ea135df1f393578c1eea530bec00fa16f6bba7e3aa3014104626f9b06c44bcfd5d2f6bdeab456591287e2d2b2e299815edf0c9fd0f23c21364ed5dbe97c9c6e2be40fff40c31f8561a9dee015146fe59ecf68b8a377292c72ffffffff02c0c62d00000000001976a914e410e8bc694e8a39c32a273eb1d71930f63648fe88acc0cf6a00000000001976a914324505870d6f21dca7d2f90642cd9603553f6fa688ac00000000")
