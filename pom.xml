@@ -3,14 +3,14 @@
     <groupId>fr.acinq</groupId>
     <artifactId>bitcoin-lib_2.11</artifactId>
     <packaging>jar</packaging>
-    <version>0.9.19-SNAPSHOT</version>
+    <version>0.16-SNAPSHOT</version>
     <description>Simple Scala Bitcoin library</description>
     <url>https://github.com/ACINQ/bitcoin-lib</url>
     <name>bitcoin-lib</name>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <scala.version>2.11.11</scala.version>
+        <scala.version>2.11.12</scala.version>
         <scala.version.short>2.11</scala.version.short>
     </properties>
 
@@ -48,44 +48,13 @@
     <build>
         <plugins>
             <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>build-helper-maven-plugin</artifactId>
-                <version>3.0.0</version>
-                <executions>
-                    <execution>
-                        <id>add-source</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>add-source</goal>
-                        </goals>
-                        <configuration>
-                            <sources>
-                                <source>secp256k1/src/java</source>
-                                <source>src/main/scala</source>
-                            </sources>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>add-test-source</id>
-                        <phase>generate-test-sources</phase>
-                        <goals>
-                            <goal>add-test-source</goal>
-                        </goals>
-                        <configuration>
-                            <sources>
-                                <source>src/test/scala</source>
-                            </sources>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.6.1</version>
+                <version>3.8.0</version>
                 <configuration>
                     <source>1.7</source>
                     <target>1.7</target>
+                    <release>7</release>
                 </configuration>
                 <executions>
                     <execution>
@@ -106,6 +75,12 @@
                         <arg>-feature</arg>
                         <arg>-language:postfixOps</arg>
                         <arg>-language:implicitConversions</arg>
+                        <arg>-Xfatal-warnings</arg>
+                        <arg>-unchecked</arg>
+                        <arg>-Xmax-classfile-name</arg>
+                        <arg>140</arg>
+                        <arg>-nobootcp</arg>
+                        <arg>-target:jvm-1.7</arg>
                     </args>
                     <scalaCompatVersion>${scala.version.short}</scalaCompatVersion>
                 </configuration>
@@ -134,7 +109,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
-                <version>3.0.1</version>
+                <version>3.1.0</version>
                 <executions>
                     <execution>
                         <id>attach-sources</id>
@@ -174,29 +149,6 @@
                 </executions>
             </plugin>
             <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <inherited>false</inherited> <!-- only execute these in the parent -->
-                <executions>
-                    <execution>
-                        <id>git submodule update</id>
-                        <phase>initialize</phase>
-                        <configuration>
-                            <executable>git</executable>
-                            <arguments>
-                                <argument>submodule</argument>
-                                <argument>update</argument>
-                                <argument>--init</argument>
-                                <argument>--recursive</argument>
-                            </arguments>
-                        </configuration>
-                        <goals>
-                            <goal>exec</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-release-plugin</artifactId>
                 <version>2.5.3</version>
@@ -230,15 +182,21 @@
             <artifactId>scala-library</artifactId>
             <version>${scala.version}</version>
         </dependency>
+        <!-- -->
+        <dependency>
+            <groupId>fr.acinq.bitcoin</groupId>
+            <artifactId>secp256k1-jni</artifactId>
+            <version>1.2</version>
+        </dependency>
         <dependency>
             <groupId>com.madgag.spongycastle</groupId>
             <artifactId>core</artifactId>
             <version>1.58.0.0</version>
         </dependency>
         <dependency>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java</artifactId>
-            <version>2.5.0</version>
+            <groupId>org.scodec</groupId>
+            <artifactId>scodec-bits_${scala.version.short}</artifactId>
+            <version>1.1.12</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -266,7 +224,7 @@
         <dependency>
             <groupId>org.scalatest</groupId>
             <artifactId>scalatest_${scala.version.short}</artifactId>
-            <version>3.0.5</version>
+            <version>3.0.8</version>
             <scope>test</scope>
         </dependency>
         <dependency>
