@@ -266,6 +266,8 @@ object Crypto {
     ByteVector64(ByteVector.view(r.toByteArray.dropWhile(_ == 0)).padLeft(32) ++ ByteVector.view(s.toByteArray.dropWhile(_ == 0)).padLeft(32))
   }
 
+  private def encodeSignatureCompact(t: (BigInteger, BigInteger)): ByteVector = encodeSignatureCompact(t._1, t._2)
+
   def isValidDERSignatureEncoding(sig: ByteVector): Boolean = {
     // Format: 0x30 [total-length] 0x02 [R-length] [R] 0x02 [S-length] [S]
     // * total-length: 1-byte length descriptor of everything that follows,
@@ -354,6 +356,11 @@ object Crypto {
   private def normalizeSignature(r: BigInteger, s: BigInteger): (BigInteger, BigInteger) = {
     val s1 = if (s.compareTo(halfCurveOrder) > 0) curve.getN().subtract(s) else s
     (r, s1)
+  }
+
+  def normalizeSignature(sig: ByteVector): ByteVector = {
+    val (r, s) = decodeSignatureFromDER(sig)
+    encodeSignatureCompact(normalizeSignature(r, s))
   }
 
   def checkDataSignatureEncoding(sig: ByteVector, flags: Int): Boolean = {
@@ -532,7 +539,8 @@ object Crypto {
 
   def verifyECDSASignature(data: ByteVector, signature: ByteVector, publicKey: PublicKey): Boolean = Try {
     if (Secp256k1Context.isEnabled) {
-      NativeSecp256k1.verify(data.toArray, signature.toArray, publicKey.value.toArray)
+      val signature1 = normalizeSignature(signature)
+      NativeSecp256k1.verify(data.toArray, signature1.toArray, publicKey.value.toArray)
     } else {
       val (r, s) = decodeSignatureFromDER(signature)
       require(r.compareTo(one) >= 0, "r must be >= 1")
