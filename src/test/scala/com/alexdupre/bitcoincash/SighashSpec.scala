@@ -2,6 +2,7 @@ package com.alexdupre.bitcoincash
 
 import com.alexdupre.bitcoincash.Crypto.PrivateKey
 import org.scalatest.FunSuite
+import scodec.bits.ByteVector
 
 /**
   * Created by fabrice on 25/10/16.
@@ -9,8 +10,8 @@ import org.scalatest.FunSuite
 class SighashSpec extends FunSuite {
   test("SIGHASH_ANYONECANPAY lets you add inputs") {
     val privateKeys = List(
-      PrivateKey.fromBase58("cV7LGVeY2VPuCyCSarqEqFCUNig2NzwiAEBTTA89vNRQ4Vqjfurs", Base58.Prefix.SecretKeyTestnet),
-      PrivateKey.fromBase58("cV5oyXUgySSMcUvKNdKtuYg4t4NTaxkwYrrocgsJZuYac2ogEdZX", Base58.Prefix.SecretKeyTestnet)
+      PrivateKey.fromBase58("cV7LGVeY2VPuCyCSarqEqFCUNig2NzwiAEBTTA89vNRQ4Vqjfurs", Base58.Prefix.SecretKeyTestnet)._1,
+      PrivateKey.fromBase58("cV5oyXUgySSMcUvKNdKtuYg4t4NTaxkwYrrocgsJZuYac2ogEdZX", Base58.Prefix.SecretKeyTestnet)._1
     )
 
     val publicKeys = privateKeys.map(_.publicKey)
@@ -26,8 +27,8 @@ class SighashSpec extends FunSuite {
     // add an input
     val tx1 = {
       val tmp = tx.addInput(TxIn(OutPoint(previousTx(0), 0), sequence = 0xFFFFFFFFL, signatureScript = Nil))
-      val sig: BinaryData = Transaction.signInput(tmp, 0, Script.pay2pkh(publicKeys(0)), SIGHASH_ALL | SIGHASH_ANYONECANPAY | SIGHASH_FORKID, previousTx(0).txOut(0).amount, privateKeys(0))
-      tmp.updateSigScript(0, OP_PUSHDATA(sig) :: OP_PUSHDATA(publicKeys(0)) :: Nil)
+      val sig: ByteVector = Transaction.signInput(tmp, 0, Script.pay2pkh(publicKeys(0)), SIGHASH_ALL | SIGHASH_ANYONECANPAY | SIGHASH_FORKID, previousTx(0).txOut(0).amount, privateKeys(0))
+      tmp.updateSigScript(0, OP_PUSHDATA(sig) :: OP_PUSHDATA(publicKeys(0).value) :: Nil)
 
     }
     Transaction.correctlySpends(tx1, previousTx, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
@@ -35,8 +36,8 @@ class SighashSpec extends FunSuite {
     // add another input: the first input's sig si still valid !
     val tx2 = {
       val tmp = tx1.addInput(TxIn(OutPoint(previousTx(1), 0), sequence = 0xFFFFFFFFL, signatureScript = Nil))
-      val sig: BinaryData = Transaction.signInput(tmp, 1, Script.pay2pkh(publicKeys(1)), SIGHASH_ALL | SIGHASH_ANYONECANPAY | SIGHASH_FORKID, previousTx(1).txOut(0).amount, privateKeys(1))
-      tmp.updateSigScript(1, OP_PUSHDATA(sig) :: OP_PUSHDATA(publicKeys(1)) :: Nil)
+      val sig: ByteVector = Transaction.signInput(tmp, 1, Script.pay2pkh(publicKeys(1)), SIGHASH_ALL | SIGHASH_ANYONECANPAY | SIGHASH_FORKID, previousTx(1).txOut(0).amount, privateKeys(1))
+      tmp.updateSigScript(1, OP_PUSHDATA(sig) :: OP_PUSHDATA(publicKeys(1).value) :: Nil)
     }
     Transaction.correctlySpends(tx2, previousTx, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
 
@@ -49,8 +50,8 @@ class SighashSpec extends FunSuite {
 
   test("SIGHASH_ANYONECANPAY lets you add inputs (SEGWIT version") {
     val privateKeys = List(
-      PrivateKey.fromBase58("cV7LGVeY2VPuCyCSarqEqFCUNig2NzwiAEBTTA89vNRQ4Vqjfurs", Base58.Prefix.SecretKeyTestnet),
-      PrivateKey.fromBase58("cV5oyXUgySSMcUvKNdKtuYg4t4NTaxkwYrrocgsJZuYac2ogEdZX", Base58.Prefix.SecretKeyTestnet)
+      PrivateKey.fromBase58("cV7LGVeY2VPuCyCSarqEqFCUNig2NzwiAEBTTA89vNRQ4Vqjfurs", Base58.Prefix.SecretKeyTestnet)._1,
+      PrivateKey.fromBase58("cV5oyXUgySSMcUvKNdKtuYg4t4NTaxkwYrrocgsJZuYac2ogEdZX", Base58.Prefix.SecretKeyTestnet)._1
     )
 
     val publicKeys = privateKeys.map(_.publicKey)
@@ -66,16 +67,16 @@ class SighashSpec extends FunSuite {
     // add an input
     val tx1 = {
       val tmp = tx.addInput(TxIn(OutPoint(previousTx(0), 0), sequence = 0xFFFFFFFFL, signatureScript = Nil))
-      val sig: BinaryData = Transaction.signInput(tmp, 0, Script.pay2pkh(publicKeys(0)), SIGHASH_ALL | SIGHASH_ANYONECANPAY | SIGHASH_FORKID, previousTx(0).txOut(0).amount, privateKeys(0))
-      tmp.updateSigScript(0, OP_PUSHDATA(sig) :: OP_PUSHDATA(publicKeys(0)) :: Nil)
+      val sig: ByteVector = Transaction.signInput(tmp, 0, Script.pay2pkh(publicKeys(0)), SIGHASH_ALL | SIGHASH_ANYONECANPAY | SIGHASH_FORKID, previousTx(0).txOut(0).amount, privateKeys(0))
+      tmp.updateSigScript(0, OP_PUSHDATA(sig) :: OP_PUSHDATA(publicKeys(0).value) :: Nil)
     }
     Transaction.correctlySpends(tx1, previousTx, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
 
     // add another input: the first input's sig si still valid !
     val tx2 = {
       val tmp = tx1.addInput(TxIn(OutPoint(previousTx(1), 0), sequence = 0xFFFFFFFFL, signatureScript = Nil))
-      val sig: BinaryData = Transaction.signInput(tmp, 1, Script.pay2pkh(publicKeys(1)), SIGHASH_ALL | SIGHASH_ANYONECANPAY | SIGHASH_FORKID, previousTx(1).txOut(0).amount, privateKeys(1))
-      tmp.updateSigScript(1, OP_PUSHDATA(sig) :: OP_PUSHDATA(publicKeys(1)) :: Nil)
+      val sig: ByteVector = Transaction.signInput(tmp, 1, Script.pay2pkh(publicKeys(1)), SIGHASH_ALL | SIGHASH_ANYONECANPAY | SIGHASH_FORKID, previousTx(1).txOut(0).amount, privateKeys(1))
+      tmp.updateSigScript(1, OP_PUSHDATA(sig) :: OP_PUSHDATA(publicKeys(1).value) :: Nil)
     }
     Transaction.correctlySpends(tx2, previousTx, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
 

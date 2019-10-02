@@ -8,6 +8,7 @@ import org.scalatest.FunSuite
   * use the same scheme will a different derivation path.
   */
 class DeriveWalletKeysSpec extends FunSuite {
+
   import DeriveWalletKeysSpec._
 
   val mnemonics = "gun please vital unable phone catalog explain raise erosion zoo truly exist"

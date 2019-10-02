@@ -16,7 +16,6 @@ This is a simple scala library which implements most of the bitcoin cash protoco
 * pay to script tx / multisig tx
 * BIP 32 (deterministic wallets)
 * BIP 39 (mnemonic code for generating deterministic keys)
-* BIP 70
 * CashAddr address format
 * Schnorr signature verification
 
@@ -36,10 +35,26 @@ Our goal is not to re-implement a full Bitcoin Cash node but to build a library 
 * releases and milestones are pushed to maven central
 
 ```scala
-libraryDependencies += "com.alexdupre" %% "bitcoincash-lib" % "0.9.20"
+libraryDependencies += "com.alexdupre" %% "bitcoincash-lib" % "0.15"
 ```
 
-The latest released version is 0.9.20
+The latest released version is 0.15
+
+## libscp256k1 support
+
+bitcoin-lib embeds JNI bindings for libsecp256k1, which is must faster than BouncyCastle. It will extract and load native bindings for your operating system
+in a temporary directory. If this process fails it will fallback to BouncyCastle.
+
+JNI libraries are included for:
+- Linux 64 bits
+- Windows 64 bits
+- Osx 64 bits
+
+You can use your own library native library by specifying its path with `-Dfr.acinq.secp256k1.lib.path` and optionally its name with `-Dfr.acinq.secp256k1.lib.name` (if unspecified
+bitcoin-lib will use the standard name for your OS i.e. libsecp256k1.so on Linux, secp256k1.dll on Windows, ...)
+
+You can also specify the temporary directory where the library will be extracted with `-Djava.io.tmpdir` or `-Dfr.acinq.secp256k1.tmpdir` (if you want to use a different
+directory from `-Djava.io.tmpdir`).
 
 ## Usage
 
