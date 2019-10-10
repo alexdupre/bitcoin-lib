@@ -368,13 +368,12 @@ object Crypto {
     else checkRawSignatureEncoding(sig, flags)
   }
 
-  def checkTransactionSignatureEncoding(sig: ByteVector, flags: Int, supportSchnorr: Boolean): Boolean = {
+  def checkTransactionSignatureEncodingImpl(sig: ByteVector, flags: Int, verifyFunction: ByteVector => Boolean): Boolean = {
     import ScriptFlags._
     // Empty signature. Not strictly DER encoded, but allowed to provide a
     // compact way to provide an invalid signature for use with CHECK(MULTI)SIG
     if (sig.isEmpty) true
-    else if (supportSchnorr && !checkRawSignatureEncoding(sig.dropRight(1), flags)) false
-    else if (!supportSchnorr && !checkRawECDSASignatureEncoding(sig.dropRight(1), flags)) false
+    else if (!verifyFunction(sig.dropRight(1))) false
     else if ((flags & SCRIPT_VERIFY_STRICTENC) != 0) {
       if (!isDefinedHashtypeSignature(sig)) false
       else {
@@ -388,9 +387,23 @@ object Crypto {
     else true
   }
 
+  def checkTransactionSignatureEncoding(sig: ByteVector, flags: Int): Boolean = {
+    checkTransactionSignatureEncodingImpl(sig, flags, checkRawSignatureEncoding(_, flags))
+  }
+
+  def checkTransactionECDSASignatureEncoding(sig: ByteVector, flags: Int): Boolean = {
+    checkTransactionSignatureEncodingImpl(sig, flags, checkRawECDSASignatureEncoding(_, flags))
+  }
+
+  def checkTransactionSchnorrSignatureEncoding(sig: ByteVector, flags: Int): Boolean = {
+    checkTransactionSignatureEncodingImpl(sig, flags, checkRawSchnorrSignatureEncoding(_, flags))
+  }
+
+  def isSchnorrSig(sig: ByteVector): Boolean = sig.size == 64
+
   def checkRawECDSASignatureEncoding(sig: ByteVector, flags: Int): Boolean = {
     import ScriptFlags._
-    if ((flags & SCRIPT_ENABLE_SCHNORR) != 0 && (sig.size == 64)) {
+    if (isSchnorrSig(sig)) {
       // In an ECDSA-only context, 64-byte signatures are banned when
       // Schnorr flag set.
       false
@@ -399,11 +412,15 @@ object Crypto {
     else true
   }
 
+  def checkRawSchnorrSignatureEncoding(sig: ByteVector, flags: Int): Boolean = {
+    if (isSchnorrSig(sig)) true
+    else false
+  }
+
   def checkRawSignatureEncoding(sig: ByteVector, flags: Int): Boolean = {
-    import ScriptFlags._
-    if ((flags & SCRIPT_ENABLE_SCHNORR) != 0 && (sig.size == 64)) {
+    if (isSchnorrSig(sig)) {
       // In a generic-signature context, 64-byte signatures are interpreted
-      // as Schnorr signatures (always correctly encoded) when flag set.
+      // as Schnorr signatures (always correctly encoded).
       true
     } else checkRawECDSASignatureEncoding(sig, flags)
   }
@@ -530,7 +547,7 @@ object Crypto {
     * @return true is signature is valid for this data with this public key
     */
   def verifySignature(data: ByteVector, signature: ByteVector, publicKey: PublicKey, flags: Int): Boolean = {
-    if ((flags & ScriptFlags.SCRIPT_ENABLE_SCHNORR) != 0 && (signature.size == 64)) {
+    if (signature.size == 64) {
       verifySchnorrSignature(data, signature, publicKey)
     } else {
       verifyECDSASignature(data, signature, publicKey)

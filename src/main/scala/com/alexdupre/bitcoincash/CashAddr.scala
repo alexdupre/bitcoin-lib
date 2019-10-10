@@ -194,11 +194,11 @@ object CashAddr {
   def decodeAddressTolerant(address: String): (String, Byte, ByteVector) = {
     if (address.contains(':')) decodeAddress(address)
     else {
-      def tryPrefixes(ps: Seq[String]): (String, Byte, ByteVector) = ps match {
+      def tryPrefixes(ps: List[String]): (String, Byte, ByteVector) = ps match {
         case Nil => throw new IllegalArgumentException("unable to auto-detect address prefix")
         case prefix :: tail => Try(decodeAddress(s"$prefix:$address")).toOption.fold(tryPrefixes(tail))(identity)
       }
-      tryPrefixes(Seq("bitcoincash", "bchtest", "bchreg"))
+      tryPrefixes(List("bitcoincash", "bchtest", "bchreg"))
     }
   }
 

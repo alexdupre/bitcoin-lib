@@ -156,7 +156,7 @@ object Transaction extends BtcSerializer[Transaction] {
     input.txIn.foreach(TxIn.validate)
     input.txOut.foreach(TxOut.validate)
     val sigOpCountWithoutP2SH = (input.txIn.map(_.signatureScript) ++ input.txOut.map(_.publicKeyScript)).foldLeft(0) {
-      case (n, script) => Script.getSigOpCount(Script.parse(script), ScriptFlags.STANDARD_CHECKDATASIG_VERIFY_FLAGS, false)
+      case (n, script) => Script.getSigOpCount(Script.parse(script), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS, false)
     }
     require(sigOpCountWithoutP2SH <= MAX_TX_SIGOPS_COUNT, "number of signature operations is invalid")
     val outPoints = input.txIn.map(_.outPoint)

@@ -3,7 +3,7 @@ package com.alexdupre.bitcoincash
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, InputStream, OutputStream}
 
 import com.alexdupre.bitcoincash.Crypto._
-import scodec.bits.ByteVector
+import scodec.bits.{BitVector, ByteVector}
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -15,6 +15,7 @@ object ScriptFlags {
   val SCRIPT_VERIFY_NONE = 0
 
   // Evaluate P2SH subscripts (softfork safe, BIP16).
+  // Note: The Segwit Recovery feature is an exception to P2SH
   val SCRIPT_VERIFY_P2SH = (1 << 0)
 
   // Passing a non-strict-DER signature or one with undefined hashtype to a checksig operation causes script failure.
@@ -57,6 +58,7 @@ object ScriptFlags {
   // "Exactly one stack element must remain, and when interpreted as a boolean, it must be true".
   // (softfork safe, BIP62 rule 6)
   // Note: CLEANSTACK should never be used without P2SH.
+  // Note: The Segwit Recovery feature is an exception to CLEANSTACK
   val SCRIPT_VERIFY_CLEANSTACK = (1 << 8)
 
   // Verify CHECKLOCKTIMEVERIFY
@@ -89,17 +91,19 @@ object ScriptFlags {
   //
   val SCRIPT_ENABLE_REPLAY_PROTECTION = (1 << 17)
 
-  // Is OP_CHECKDATASIG and variant are enabled.
+  // Count sigops for OP_CHECKDATASIG and variant. The interpreter treats
+  // OP_CHECKDATASIG(VERIFY) as always valid, this flag only affects sigops
+  // counting.
   //
-  val SCRIPT_ENABLE_CHECKDATASIG = (1 << 18)
+  val SCRIPT_VERIFY_CHECKDATASIG_SIGOPS = (1 << 18)
 
-  // Are Schnorr signatures enabled for OP_CHECK(DATA)SIG(VERIFY) and
-  // 65-byte signatures banned for OP_CHECKMULTISIG(VERIFY)?
-  //
-  val SCRIPT_ENABLE_SCHNORR = (1 << 19)
+  // The exception to CLEANSTACK and P2SH for the recovery of coins sent
+  // to p2sh segwit addresses is not allowed.
+  val SCRIPT_DISALLOW_SEGWIT_RECOVERY = (1 << 20)
 
-  // Allows the recovery of coins sent to p2sh segwit addresses
-  val SCRIPT_ALLOW_SEGWIT_RECOVERY = (1 << 20)
+  // Whether to allow new OP_CHECKMULTISIG logic to trigger. (new multisig
+  // logic verifies faster, and only allows Schnorr signatures)
+  val SCRIPT_ENABLE_SCHNORR_MULTISIG = (1 << 21)
 
   /**
     * Mandatory script verification flags that all new blocks must comply with for
@@ -120,7 +124,6 @@ object ScriptFlags {
     */
   val STANDARD_SCRIPT_VERIFY_FLAGS = MANDATORY_SCRIPT_VERIFY_FLAGS |
     SCRIPT_VERIFY_DERSIG |
-    SCRIPT_VERIFY_LOW_S |
     SCRIPT_VERIFY_NULLDUMMY |
     SCRIPT_VERIFY_SIGPUSHONLY |
     SCRIPT_VERIFY_MINIMALDATA |
@@ -128,12 +131,12 @@ object ScriptFlags {
     SCRIPT_VERIFY_CLEANSTACK |
     SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY |
     SCRIPT_VERIFY_CHECKSEQUENCEVERIFY |
-    SCRIPT_VERIFY_NULLFAIL
+    SCRIPT_VERIFY_CHECKDATASIG_SIGOPS |
+    SCRIPT_DISALLOW_SEGWIT_RECOVERY
 
   /** For convenience, standard but not mandatory verify flags. */
   val STANDARD_NOT_MANDATORY_VERIFY_FLAGS = STANDARD_SCRIPT_VERIFY_FLAGS & ~MANDATORY_SCRIPT_VERIFY_FLAGS
 
-  val STANDARD_CHECKDATASIG_VERIFY_FLAGS = STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_CHECKDATASIG
 }
 
 object Script {
@@ -174,7 +177,7 @@ object Script {
 
   def parse(blob: Array[Byte]): List[ScriptElt] = parse(ByteVector.view(blob))
 
-  def write(script: Seq[ScriptElt], out: OutputStream): Unit = script match {
+  def write(script: List[ScriptElt], out: OutputStream): Unit = script match {
     case Nil => ()
     case OP_PUSHDATA(data, length) :: tail if data.length < 0x4c && data.length == length => out.write(data.length.toInt); out.write(data.toArray); write(tail, out)
     case OP_PUSHDATA(data, 0x4c) :: tail if data.length < 0xff => writeUInt8(0x4c, out); writeUInt8(data.length.toInt, out); out.write(data.toArray); write(tail, out)
@@ -186,7 +189,7 @@ object Script {
 
   def write(script: Seq[ScriptElt]): ByteVector = {
     val out = new ByteArrayOutputStream()
-    write(script, out)
+    write(script.toList, out)
     ByteVector.view(out.toByteArray)
   }
 
@@ -334,6 +337,14 @@ object Script {
     }
   }
 
+  def decodeBitField(input: ByteVector, size: Int): BitVector = {
+    if (size > 32) throw new RuntimeException("Schnorr multisig checkbits implementation assumes max 32 pubkeys")
+    if (input.size != (size + 7) / 8) throw new RuntimeException("invalid bitfield size")
+    val res = input.bits.reverseByteOrder
+    if (res.take(res.size - size).toInt() != 0) throw new RuntimeException("invalid bitfield bits")
+    res.reverse.take(size)
+  }
+
   def castToBoolean(input: ByteVector): Boolean = input.toSeq.reverse match {
     case head +: tail if head == 0x80.toByte && tail.forall(_ == 0) => false
     case something if something.exists(_ != 0) => true
@@ -444,7 +455,7 @@ object Script {
       case ((n, prevOpcode), opcode) =>
         val inc = opcode match {
           case OP_CHECKSIG | OP_CHECKSIGVERIFY => 1
-          case OP_CHECKDATASIG | OP_CHECKDATASIGVERIFY => if ((scriptFlag & SCRIPT_ENABLE_CHECKDATASIG) != 0) 1 else 0
+          case OP_CHECKDATASIG | OP_CHECKDATASIGVERIFY => if ((scriptFlag & SCRIPT_VERIFY_CHECKDATASIG_SIGOPS) != 0) 1 else 0
           case OP_CHECKMULTISIG | OP_CHECKMULTISIGVERIFY => if (accurate) prevOpcode match {
             case Some(OP_1) => 1
             case Some(OP_2) => 2
@@ -507,11 +518,10 @@ object Script {
 
     import Runner._
 
-    def checkSignature(pubKey: ByteVector, sigBytes: ByteVector, scriptCode: ByteVector, supportSchnorr: Boolean): Boolean = {
-      if (sigBytes.isEmpty) false
-      else if (!Crypto.checkTransactionSignatureEncoding(sigBytes, scriptFlag, supportSchnorr)) throw new RuntimeException("invalid signature")
-      else if (!Crypto.checkPubKeyEncoding(pubKey, scriptFlag)) throw new RuntimeException("invalid public key")
-      else if (!Crypto.isPubKeyValidLax(pubKey)) false // see how this is different from above ?
+    def checkSignature(pubKey: ByteVector, sigBytes: ByteVector, scriptCode: ByteVector): Boolean = {
+      if (pubKey.isEmpty) false
+      else if (sigBytes.isEmpty) false
+      else if (!Crypto.isPubKeyValidLax(pubKey)) false
       else {
         val sigHashFlags = sigBytes.last & 0xff
         // sig hash is the last byte
@@ -519,21 +529,34 @@ object Script {
         if (sigBytes1.isEmpty) false
         else {
           val hash = Transaction.hashForSigning(context.tx, context.inputIndex, scriptCode, sigHashFlags, context.amount, scriptFlag)
-          val result = Crypto.verifySignature(hash, sigBytes1, PublicKey.fromBin(pubKey), scriptFlag)
-          result
+          Crypto.verifySignature(hash, sigBytes1, PublicKey.fromBin(pubKey), scriptFlag)
         }
       }
     }
 
-    def checkSignatures(pubKeys: Seq[ByteVector], sigs: Seq[ByteVector], scriptCode: ByteVector, supportSchnorr: Boolean): Boolean = sigs match {
-      case Nil => true
-      case _ if sigs.length > pubKeys.length => false
-      case sig :: _ if !Crypto.checkTransactionSignatureEncoding(sig, scriptFlag, supportSchnorr) => throw new RuntimeException("invalid signature")
-      case sig :: _ =>
-        if (checkSignature(pubKeys.head, sig, scriptCode, supportSchnorr))
-          checkSignatures(pubKeys.tail, sigs.tail, scriptCode, supportSchnorr)
+    def checkECDSASignatures(pubKeys: Seq[ByteVector], sigs: Seq[ByteVector], scriptCode: ByteVector): Boolean =
+      if (sigs.isEmpty) true
+      else if (sigs.length > pubKeys.length) false
+      else {
+        val sig = sigs.head
+        if (!Crypto.checkTransactionECDSASignatureEncoding(sig, scriptFlag)) throw new RuntimeException("invalid signature")
+        if (!Crypto.checkPubKeyEncoding(pubKeys.head, scriptFlag)) throw new RuntimeException("invalid public key")
+        if (checkSignature(pubKeys.head, sig, scriptCode))
+          checkECDSASignatures(pubKeys.tail, sigs.tail, scriptCode)
         else
-          checkSignatures(pubKeys.tail, sigs, scriptCode, supportSchnorr)
+          checkECDSASignatures(pubKeys.tail, sigs, scriptCode)
+      }
+
+    def checkSchnorrSignatures(pubKeys: Seq[ByteVector], sigs: Seq[ByteVector], checkBits: BitVector, scriptCode: ByteVector): Boolean = {
+      val usedPubKeys = pubKeys.zipWithIndex.filter {
+        case (_, idx) => checkBits(idx)
+      }.map(_._1)
+      sigs.zip(usedPubKeys).forall {
+        case (sig, pubKey) =>
+          if (!Crypto.checkTransactionSchnorrSignatureEncoding(sig, scriptFlag)) throw new RuntimeException("invalid signature")
+          if (!Crypto.checkPubKeyEncoding(pubKey, scriptFlag)) throw new RuntimeException("invalid public key")
+          checkSignature(pubKey, sig, scriptCode)
+      }
     }
 
     def checkMinimalEncoding: Boolean = (scriptFlag & SCRIPT_VERIFY_MINIMALDATA) != 0
@@ -726,9 +749,11 @@ object Script {
         case OP_CHECKSEQUENCEVERIFY :: tail => run(tail, stack, state.copy(opCount = opCount + 1))
         case OP_CHECKSIG :: tail => stack match {
           case pubKey :: sigBytes :: stacktail => {
+            if (!Crypto.checkTransactionSignatureEncoding(sigBytes, scriptFlag)) throw new RuntimeException("invalid signature")
+            if (!Crypto.checkPubKeyEncoding(pubKey, scriptFlag)) throw new RuntimeException("invalid public key")
             // Remove signature for pre-fork scripts
             val scriptCode1 = if ((scriptFlag & SCRIPT_ENABLE_SIGHASH_FORKID) == 0 || !isForkId(getHashType(sigBytes))) removeSignature(scriptCode, sigBytes) else scriptCode
-            val success = checkSignature(pubKey, sigBytes, Script.write(scriptCode1), true)
+            val success = checkSignature(pubKey, sigBytes, Script.write(scriptCode1))
             if (!success && (scriptFlag & SCRIPT_VERIFY_NULLFAIL) != 0) {
               require(sigBytes.isEmpty, "Signature must be zero for failed CHECKSIG operation")
             }
@@ -737,7 +762,6 @@ object Script {
           case _ => throw new RuntimeException("Cannot perform OP_CHECKSIG on a stack with less than 2 elements")
         }
         case OP_CHECKSIGVERIFY :: tail => run(OP_CHECKSIG :: OP_VERIFY :: tail, stack, state.copy(opCount = opCount - 1))
-        case OP_CHECKDATASIG :: _ if ((scriptFlag & SCRIPT_ENABLE_CHECKDATASIG) == 0) => throw new RuntimeException("OP_CHECKDATASIG: disabled")
         case OP_CHECKDATASIG :: tail => stack match {
           case pubKey :: message :: sig :: stacktail =>
             if (!Crypto.checkDataSignatureEncoding(sig, scriptFlag)) throw new RuntimeException("invalid signature")
@@ -767,12 +791,17 @@ object Script {
           // check that we have at least n + 1 items on the stack (+1 because of a bug in the reference client)
           require(stack3.size >= n + 1, "invalid stack operation")
           val sigs = stack3.take(n)
-          if ((scriptFlag & ScriptFlags.SCRIPT_VERIFY_NULLDUMMY) != 0) require(stack3(n).isEmpty, "multisig dummy is not empty")
           val stack4 = stack3.drop(n + 1)
-
-          // Remove signature for pre-fork scripts
-          val scriptCode1 = sigs.foldLeft(scriptCode)((scriptCode, sigBytes) => if ((scriptFlag & SCRIPT_ENABLE_SIGHASH_FORKID) == 0 || !isForkId(getHashType(sigBytes))) removeSignature(scriptCode, sigBytes) else scriptCode)
-          val success = checkSignatures(pubKeys, sigs, Script.write(scriptCode1), false)
+          val success = if ((scriptFlag & ScriptFlags.SCRIPT_ENABLE_SCHNORR_MULTISIG) != 0 && stack3(n).nonEmpty) {
+            val checkBits = decodeBitField(stack3(n), m)
+            require(checkBits.populationCount == n, "The bitfield doesn't set the right number of signatures")
+            checkSchnorrSignatures(pubKeys.reverse, sigs.reverse, checkBits, Script.write(scriptCode))
+          } else {
+            if ((scriptFlag & ScriptFlags.SCRIPT_VERIFY_NULLDUMMY) != 0) require(stack3(n).isEmpty, "multisig dummy is not empty")
+            // Remove signature for pre-fork scripts
+            val scriptCode1 = sigs.foldLeft(scriptCode)((scriptCode, sigBytes) => if ((scriptFlag & SCRIPT_ENABLE_SIGHASH_FORKID) == 0 || !isForkId(getHashType(sigBytes))) removeSignature(scriptCode, sigBytes) else scriptCode)
+            checkECDSASignatures(pubKeys, sigs, Script.write(scriptCode1))
+          }
           if (!success && (scriptFlag & SCRIPT_VERIFY_NULLFAIL) != 0) {
             sigs.foreach(sig => require(sig.isEmpty, "Signature must be zero for failed CHECKMULTISIG operation"))
           }
@@ -1064,9 +1093,10 @@ object Script {
           }
         }
 
-        // Bail out early if ALLOW_SEGWIT_RECOVERY is set, the redeem script is
-        // a p2sh segwit program and it was the only item pushed into the stack
-        if ((scriptFlag & SCRIPT_ALLOW_SEGWIT_RECOVERY) != 0 && stack.size == 1 &&
+        // Bail out early if SCRIPT_DISALLOW_SEGWIT_RECOVERY is not set, the
+        // redeem script is a p2sh segwit program, and it was the only item
+        // pushed onto the stack.
+        if ((scriptFlag & SCRIPT_DISALLOW_SEGWIT_RECOVERY) == 0 && stack.size == 1 &&
           isWitnessProgram(Script.parse(stack.head))) {
           return true
         }

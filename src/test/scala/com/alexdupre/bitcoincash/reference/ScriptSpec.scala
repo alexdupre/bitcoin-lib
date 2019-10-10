@@ -65,20 +65,20 @@ object ScriptSpec {
     "COMPRESSED_PUBKEYTYPE" -> SCRIPT_VERIFY_COMPRESSED_PUBKEYTYPE,
     "SIGHASH_FORKID" -> SCRIPT_ENABLE_SIGHASH_FORKID,
     "REPLAY_PROTECTION" -> SCRIPT_ENABLE_REPLAY_PROTECTION,
-    "CHECKDATASIG" -> SCRIPT_ENABLE_CHECKDATASIG,
-    "SCHNORR" -> SCRIPT_ENABLE_SCHNORR,
-    "ALLOW_SEGWIT_RECOVERY" -> SCRIPT_ALLOW_SEGWIT_RECOVERY
+    "CHECKDATASIG" -> SCRIPT_VERIFY_CHECKDATASIG_SIGOPS,
+    "DISALLOW_SEGWIT_RECOVERY" -> SCRIPT_DISALLOW_SEGWIT_RECOVERY,
+    "SCHNORR_MULTISIG" -> SCRIPT_ENABLE_SCHNORR_MULTISIG
   )
 
   def parseScriptFlags(strFlags: String): Int = if (strFlags.isEmpty) 0 else strFlags.split(",").map(mapFlagNames(_)).foldLeft(0)(_ | _)
 
   def creditTx(scriptPubKey: ByteVector, amount: Btc) = Transaction(version = 1,
-    txIn = TxIn(OutPoint(ByteVector32.Zeroes, -1), Script.write(OP_0 :: OP_0 :: Nil), 0xffffffff) :: Nil,
+    txIn = TxIn(OutPoint(ByteVector32.Zeroes, -1), Script.write(OP_0 :: OP_0 :: Nil), TxIn.SEQUENCE_FINAL) :: Nil,
     txOut = TxOut(amount, scriptPubKey) :: Nil,
     lockTime = 0)
 
   def spendingTx(scriptSig: ByteVector, tx: Transaction) = Transaction(version = 1,
-    txIn = TxIn(OutPoint(Crypto.hash256(Transaction.write(tx)), 0), scriptSig, 0xffffffff) :: Nil,
+    txIn = TxIn(OutPoint(Crypto.hash256(Transaction.write(tx)), 0), scriptSig, TxIn.SEQUENCE_FINAL) :: Nil,
     txOut = TxOut(tx.txOut(0).amount, ByteVector.empty) :: Nil,
     lockTime = 0)
 

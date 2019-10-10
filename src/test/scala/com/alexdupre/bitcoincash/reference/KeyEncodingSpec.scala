@@ -3,7 +3,7 @@ package com.alexdupre.bitcoincash.reference
 import java.io.InputStreamReader
 
 import com.alexdupre.bitcoincash.Crypto.PrivateKey
-import com.alexdupre.bitcoincash.{Base58, Base58Check}
+import com.alexdupre.bitcoincash.{Base58, Base58Check, OP_CHECKSIG, OP_DUP, OP_EQUAL, OP_EQUALVERIFY, OP_HASH160, OP_PUSHDATA, Script}
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST.{JBool, JString, JValue}
 import org.json4s.jackson.JsonMethods
@@ -16,14 +16,14 @@ class KeyEncodingSpec extends FunSuite {
   implicit val format = DefaultFormats
 
   test("valid keys") {
-    val stream = classOf[KeyEncodingSpec].getResourceAsStream("/data/base58_keys_valid.json")
+    val stream = classOf[KeyEncodingSpec].getResourceAsStream("/data/key_io_valid.json")
     val json = JsonMethods.parse(new InputStreamReader(stream))
 
     json.extract[List[List[JValue]]].map(KeyEncodingSpec.check)
   }
 
   test("invalid keys") {
-    val stream = classOf[KeyEncodingSpec].getResourceAsStream("/data/base58_keys_invalid.json")
+    val stream = classOf[KeyEncodingSpec].getResourceAsStream("/data/key_io_invalid.json")
     val json = JsonMethods.parse(new InputStreamReader(stream))
 
     json.extract[List[List[JValue]]].foreach {
@@ -53,24 +53,24 @@ object KeyEncodingSpec {
         val JBool(isPrivkey) = obj \ "isPrivkey"
         val isCompressed = obj \ "isCompressed" match {
           case JBool(value) => value
-          case _ => None
+          case _ => false
         }
-        val JBool(testNet) = obj \ "isTestnet"
+        val JString(chain) = obj \ "chain"
         if (isPrivkey) {
           val (version, data) = Base58Check.decode(encoded)
-          assert(version == Base58.Prefix.SecretKey || version == Base58.Prefix.SecretKeyTestnet)
+          assert((isCompressed && data.length == 33 && data.last == 0x01) || (!isCompressed && data.length == 32))
+          assert((chain == "main" && version == Base58.Prefix.SecretKey) || (chain != "main" && version == Base58.Prefix.SecretKeyTestnet))
           assert(data.take(32) == bin)
         } else {
-          val JString(addrType) = obj \ "addrType"
           encoded.head match {
             case '1' | 'm' | 'n' =>
               val (version, data) = Base58Check.decode(encoded)
-              assert(version == Base58.Prefix.PubkeyAddress || version == Base58.Prefix.PubkeyAddressTestnet)
-              assert(data == bin)
+              assert((chain == "main" && version == Base58.Prefix.PubkeyAddress) || (chain != "main" && version == Base58.Prefix.PubkeyAddressTestnet))
+              assert(Script.write(OP_DUP :: OP_HASH160 :: OP_PUSHDATA(data) :: OP_EQUALVERIFY :: OP_CHECKSIG :: Nil) == bin)
             case '2' | '3' =>
               val (version, data) = Base58Check.decode(encoded)
-              assert(version == Base58.Prefix.ScriptAddress || version == Base58.Prefix.ScriptAddressTestnet)
-              assert(data == bin)
+              assert((chain == "main" && version == Base58.Prefix.ScriptAddress) || (chain != "main" && version == Base58.Prefix.ScriptAddressTestnet))
+              assert(Script.write(OP_HASH160 :: OP_PUSHDATA(data) :: OP_EQUAL :: Nil) == bin)
           }
         }
       }

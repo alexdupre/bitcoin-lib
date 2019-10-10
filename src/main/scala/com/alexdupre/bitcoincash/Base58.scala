@@ -21,9 +21,14 @@ object Base58 {
     val PubkeyAddress = 0.toByte
     val ScriptAddress = 5.toByte
     val SecretKey = 128.toByte
+    val ExtPublicKey = ByteVector(0x04, 0x35, 0x87, 0xCF)
+    val ExtSecretKey = ByteVector(0x04, 0x35, 0x83, 0x94)
+
     val PubkeyAddressTestnet = 111.toByte
     val ScriptAddressTestnet = 196.toByte
     val SecretKeyTestnet = 239.toByte
+    val ExtPublicKeyTestnet = ByteVector(0x04, 0x35, 0x87, 0xCF)
+    val ExtSecretKeyTestnet = ByteVector(0x04, 0x35, 0x83, 0x94)
   }
 
 }
